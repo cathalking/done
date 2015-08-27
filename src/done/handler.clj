@@ -51,25 +51,25 @@
   ;    (dunnit/history historyid)
   ;     ))
 
-  (GET "/listdunnits/new" []
-    (r/response
-      (dunnit/list-all-dunnits dunnit/label-dunnit-new)
-      ))
+  ;(GET "/listdunnits/new" []
+  ;  (r/response
+  ;    (dunnit/list-all-dunnits dunnit/label-dunnit-new)
+  ;    ))
 
-  (GET "/listdunnits/processed" []
-    (r/response
-      (dunnit/list-all-dunnits dunnit/label-dunnit-processed)
-      ))
+  ;(GET "/listdunnits/processed" []
+  ;  (r/response
+  ;    (dunnit/list-all-dunnits dunnit/label-dunnit-processed)
+  ;    ))
 
   ;(GET "/dunnitssummary" []
   ;  (r/response
   ;    (dunnit/dunnits-summary)
   ;    ))
 
-  (GET "/message/:messageid" [messageid]
-    (r/response
-      (dunnit/get-message messageid)
-      ))
+  ;(GET "/message/:messageid" [messageid]
+  ;  (r/response
+  ;    (dunnit/get-message messageid)
+  ;    ))
 
   ;(GET "/messagecontent/:messageid" [messageid]
   ;  (r/response
@@ -96,13 +96,14 @@
   ;;   (r/response (dunnit/process-latest-dunnit-emails))
   ;    ;(r/response (dunnit/get-latest-dunnit-messages))
   ;    )
-  (POST "/processdunnit" [messageid]
-    (let [message-content (dunnit/extract-message-content (dunnit/get-message messageid))]
-      (dunnit/process-dunnit messageid)
-      (println message-content)
-      (r/redirect-after-post "/dunnit")
-      )
-    )
+
+  ;(POST "/processdunnit" [messageid]
+  ;  (let [message-content (dunnit/extract-message-content (dunnit/get-message messageid))]
+  ;    (dunnit/process-dunnit messageid)
+  ;    (println message-content)
+  ;    (r/redirect-after-post "/dunnit")
+  ;    )
+  ;  )
 
   ;(POST "/ackdone" {body :body}
   ;  (println "Ack Received for: " body)
