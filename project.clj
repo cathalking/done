@@ -1,17 +1,24 @@
 (defproject done "0.1.0-SNAPSHOT"
-  :description "FIXME: write description"
-  :url "http://example.com/FIXME"
+  :description "Dunnit - Done Tracker"
+  :url "https://done-1041.appspot.com/done"
   :min-lein-version "2.0.0"
   :dependencies [[org.clojure/clojure "1.6.0"]
-                 [compojure "1.3.1"]
-                 [clj-http "1.0.1"]
+                 [compojure "1.1.6"]
                  [cheshire "5.3.1"]
-                 [ring/ring "1.4.0"]
-                 [ring/ring-jetty-adapter "1.4.0"]
-                 [ring/ring-defaults "0.1.2"]
-                 [hiccup "1.0.5"]]
-  :plugins [[lein-ring "0.8.13"]]
+                 [org.clojure/data.codec "0.1.0"]
+                 [hiccup "1.0.5"]
+                 [ring/ring-json "0.3.1"]
+                 [ring-server "0.3.1"]
+                 [environ "1.0.0"]
+                 [gmail-clj "0.6.2"]
+                 ]
+  :plugins [[lein-ring "0.8.13"]
+            [lein-environ "1.0.0"]]
   :ring {:handler done.handler/app}
-  :profiles
-  {:dev {:dependencies [[javax.servlet/servlet-api "2.5"]
-                        [ring-mock "0.1.5"]]}})
+  :aot :all
+  :profiles { :production {:ring {:open-browser? false, :stacktraces? false, :auto-reload? false}
+                          :jvm-opts ["-Ddomain=done-1041.appspot.com" "-Dprotocol=https" ]}
+              :dev        {:dependencies [[ring-mock "0.1.5"] [ring/ring-devel "1.2.1"]]
+                          :jvm-opts ["-Ddomain=localhost:3000" "-Dprotocol=http" ]}
+             })
+

@@ -1,0 +1,16 @@
+<appengine-web-app xmlns="http://appengine.google.com/ns/1.0">
+  <application>done-1041</application>
+  <version>3</version>
+  <threadsafe>false</threadsafe>
+  <!-- <static-files /> -->
+  <!-- <resource-files /> -->
+<system-properties>
+	<property name="domain" value="<your-app-domain>" />
+  <property name="protocol" value="https" />
+  <property name="gmail-api-domain" value="https://www.googleapis.com/gmail/v1" />
+  <property name="gmail-api-grant-type" value="refresh_token" />
+  <property name="gmail-api-client-id" value="<download details from Google App Engine Developer Console>" />
+  <property name="gmail-api-client-secret" value="<download details from Google App Engine Developer Console>" />
+  <property name="gmail-api-refresh-token" value="<download details from Google App Engine Developer Console????>" />
+</system-properties>
+</appengine-web-app>
