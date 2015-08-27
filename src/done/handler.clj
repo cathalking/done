@@ -16,7 +16,9 @@
   (GET "/" [] (r/redirect "/dunnit"))
 
   (GET "/dunnit" []
-    (views/done-home-page))
+    (if (empty? @dunnit/dones) 
+      (views/done-home-page (dunnit/process-previous-dunnit-emails))
+      (views/done-home-page @dunnit/dones)))
 
   (POST "/dunnit" [done]
     (if (not (clojure.string/blank? done))
@@ -25,9 +27,9 @@
 
   (POST "/done" {body :body}
     (let [data  (get-in body [:message :data])
-         pub-sub-message body
-         gmail-notif (json/parse-string (dunnit/decode-msg data) true)
-         gmail-notif-json-str (dunnit/decode-msg data)]
+          pub-sub-message body
+          gmail-notif (json/parse-string (dunnit/decode-msg data) true)
+          gmail-notif-json-str (dunnit/decode-msg data)]
      ;(println "Received: " (:message pub-sub-message))
      (if (not (empty? gmail-notif))
        (->

@@ -15,7 +15,9 @@
       (println "Request: " url-str)
       (if (= 200 status)
           {:status 200 
-           :body (json/parse-string (slurp (. http-url-conn getInputStream)))}
+           :body (walk/keywordize-keys 
+                   (json/parse-string 
+                     (slurp (. http-url-conn getInputStream))))}
           {:status status 
            :headers (. http-url-conn getHeaderFields)
            :response-message (. http-url-conn getResponseMessage) 
@@ -41,7 +43,9 @@
         (let [status (. http-url-conn getResponseCode)]
           (if (= 200 status)
             { :status 200 
-              :body (json/parse-string (slurp (. http-url-conn getInputStream)))}
+              :body (walk/keywordize-keys
+                     (json/parse-string 
+                       (slurp (. http-url-conn getInputStream))))}
             { :status status 
               :headers (. http-url-conn getHeaderFields)
               :response-message (. http-url-conn getResponseMessage) 

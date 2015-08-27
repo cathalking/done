@@ -41,23 +41,17 @@
 ;  [:ul.list-group (for [x col] [:li.list-group-item (str x)])]
 ;  ))
 
-(defn api-tester-page []
-  (common-layout "API Tester"
-    (form-list "/apitester" [{:name "http-method" :label "HTTP method"} {:name "api-url" :label "API URL"}] "Test API call")
-    )
-  )
-
-(defn done-home-page []
+(defn done-home-page [dones]
   (let [dunnits-summary-resp (:body (dunnit/dunnits-summary))
-        messages (select-keys dunnits-summary-resp ["messagesUnread" "messagesTotal"])]
+        messages (select-keys dunnits-summary-resp [:messagesUnread :messagesTotal])]
   (common-layout "Dunnit"
     (done-form "/dunnit" "done")
     (list-title "My Dunnits")
-    (table-list @dunnit/dones)
+    (table-list (map str dones))
     (list-title "Other's Dunnits")
     (table-list @dunnit/other-dones)
     (list-title "Dunnit-labelled Emails")
-    (table-list {:unprocessed-messages (get messages "messagesTotal")})
+    (table-list {:unprocessed-messages (get messages :messagesTotal)})
     (done-form "/processdunnit" "messageid")
     (list-title "Emails pulled using Notifications")
     (table-list @dunnit/emails)
