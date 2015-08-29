@@ -4,26 +4,12 @@
     [done.http :as http]
     [gmail-clj.core :as gm]))
 
-(def oauth-creds (ref {}))
-(def oauth-token (ref {}))
+(defn oauth-creds [] {:refresh_token (System/getProperty "gmail-api-refresh-token") 
+                  :client_id (System/getProperty "gmail-api-client-id") 
+                  :client_secret (System/getProperty "gmail-api-client-secret") 
+                  :grant_type (System/getProperty "gmail-api-grant-type")})
 
-
-(defn authcreds [] 
-  (let [
-        refresh_token (if (nil? (:refresh_token @oauth-creds)) 
-                        (System/getProperty "gmail-api-refresh-token") (:refresh_token @oauth-creds))
-        client_id (if (nil? (:client_id @oauth-creds))
-                        (System/getProperty "gmail-api-client-id") (:client_id @oauth-creds))
-        client_secret (if (nil? (:client_secret @oauth-creds))
-                        (System/getProperty "gmail-api-client-secret") (:client_secret @oauth-creds))
-        grant_type (if (nil? (:grant_type @oauth-creds)) (System/getProperty "gmail-api-grant-type")
-                        (:grant_type @oauth-creds))
-        creds { :refresh_token refresh_token
-                :client_id client_id
-                :client_secret client_secret
-                :grant_type grant_type}]
-      (dosync (alter oauth-creds merge @oauth-creds creds))
-    ))
+(def oauth-token (ref {:access_token nil :expires_in nil}))
 
 (defn as-form-params [m]
   (->> (clojure.walk/stringify-keys m)
@@ -32,27 +18,41 @@
   )
 
 (defn load-creds [file]
-  (dosync (alter oauth-creds merge @oauth-creds (json/parse-string (slurp file) true))))
+  (let [creds-map (json/parse-string (slurp file))]
+    (doall
+      (for [[k v] creds-map] (System/setProperty k v)))))
 
 (defn oauth-form-params []
-  (as-form-params (authcreds)))
+  (as-form-params (oauth-creds)))
 
-(defn refresh-oauth-token []
-  (let [resp (http/gae-post-req "https://accounts.google.com/o/oauth2/token" 
-                                                (oauth-form-params) "application/x-www-form-urlencoded") 
-        new-token (select-keys (:body resp)[:access_token :expires_in])]
-    (if (= 200 (:status resp)) (println "Refreshed oauth-token") (println "Failed to refresh token. Response was: " (:body resp)))
-    (dosync (alter oauth-token merge @oauth-token new-token))
-    )
-  )
+(def google-oauth-api-headers [["Content-Type" "application/x-www-form-urlencoded"]])
 
 (defn now [] 
   (quot (System/currentTimeMillis) 1000))
 
+(defn refresh-oauth-token 
+  ([] (refresh-oauth-token false))
+  ([log?]
+    (let [resp (http/gae-post-req "https://accounts.google.com/o/oauth2/token" 
+                                                (oauth-form-params) google-oauth-api-headers log?)
+        access-token (get-in resp [:body :access_token])
+        expires-in (+ (now) (get-in resp [:body :expires_in]))]
+      (if (= 200 (:status resp)) (println "Refreshed oauth-token") (println "Failed to refresh token. Response was: " (:body resp)))
+      (dosync (alter oauth-token merge @oauth-token {:access_token access-token :expires_in expires-in}))
+    )
+  ))
+
 (defn get-token
   "Returns the current active auth token."
   []
-  (when (or (empty? @oauth-token)
-            (> (get @oauth-token :expires_in) (now)))
+  ;(when (or (empty? @oauth-token)
+  (when (or (nil? (:access_token @oauth-token))
+            (> (now) (get @oauth-token :expires_in)))
       (refresh-oauth-token))
   (get @oauth-token :access_token))  
+
+(defn gmail-api-headers []
+  [
+   ["Content-Type" "application/json"]
+   ["Authorization" (str "Bearer " (get-token))]])
+

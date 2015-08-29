@@ -30,13 +30,14 @@
           pub-sub-message body
           gmail-notif (json/parse-string (dunnit/decode-msg data) true)
           gmail-notif-json-str (dunnit/decode-msg data)]
-     ;(println "Received: " (:message pub-sub-message))
+     (println "Received: " (:message pub-sub-message))
      (if (not (empty? gmail-notif))
        (->
         (r/response 
           (do
             (dunnit/persist-in dunnit/notifications {:gmail-notif gmail-notif :history-api-resp (dunnit/history (:historyId gmail-notif))})
             (dunnit/persist-in dunnit/pub-sub-messages {:gmail-notif gmail-notif, :raw-message (:message pub-sub-message)})
+            (when (empty? @dunnit/dones) (dunnit/process-previous-dunnit-emails))
             (dunnit/process-latest-dunnit-emails)
         ) )
         (r/status 200)
@@ -48,72 +49,6 @@
      )
    ))
 
-  ;(GET "/history/:historyid" [historyid]
-  ;  (r/response
-  ;    (dunnit/history historyid)
-  ;     ))
-
-  ;(GET "/listdunnits/new" []
-  ;  (r/response
-  ;    (dunnit/list-all-dunnits dunnit/label-dunnit-new)
-  ;    ))
-
-  ;(GET "/listdunnits/processed" []
-  ;  (r/response
-  ;    (dunnit/list-all-dunnits dunnit/label-dunnit-processed)
-  ;    ))
-
-  ;(GET "/dunnitssummary" []
-  ;  (r/response
-  ;    (dunnit/dunnits-summary)
-  ;    ))
-
-  ;(GET "/message/:messageid" [messageid]
-  ;  (r/response
-  ;    (dunnit/get-message messageid)
-  ;    ))
-
-  ;(GET "/messagecontent/:messageid" [messageid]
-  ;  (r/response
-  ;    (dunnit/extract-message-content (dunnit/get-message messageid))
-  ;    ))
-
-  ;(GET "/trash/:messageid" [messageid]
-  ;  (r/response
-  ;    (dunnit/get-message messageid)
-  ;    ))
-
-  ;(GET "/allmessages" []
-  ;  (r/response @dunnit/pub-sub-messages))
-
-  ;(GET "/apitester" []
-  ;  (views/api-tester-page))
-
-  ;(POST "/apitester" [http-method api-url]
-  ;  (if (= "GET" http-method)
-  ;       (r/response (dunnit/gae-get-req api-url))
-  ;     (r/response (str "Received " http-method " " api-url))))
-
-  ;(POST "/done2" {body :body}
-  ;;   (r/response (dunnit/process-latest-dunnit-emails))
-  ;    ;(r/response (dunnit/get-latest-dunnit-messages))
-  ;    )
-
-  ;(POST "/processdunnit" [messageid]
-  ;  (let [message-content (dunnit/extract-message-content (dunnit/get-message messageid))]
-  ;    (dunnit/process-dunnit messageid)
-  ;    (println message-content)
-  ;    (r/redirect-after-post "/dunnit")
-  ;    )
-  ;  )
-
-  ;(POST "/ackdone" {body :body}
-  ;  (println "Ack Received for: " body)
-  ;  (->
-  ;    (r/response "")
-  ;    (r/status 200)
-  ;    (r/header "Content-Type" "application/json"))
-  ; )
  )
 
 (defroutes standard-routes

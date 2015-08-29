@@ -31,7 +31,7 @@
                     :auto-reload? true
                     :destroy (println "gae-app-demo is shutting down")
                     :join true}))
-    (load-creds "/var/tmp/creds.json")
+    (load-creds "/var/tmp/creds2.json")
     (println (str "You can view the site at " (app-path "")))))
 
 (defn stop-server []

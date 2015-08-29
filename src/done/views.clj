@@ -42,12 +42,13 @@
 ;  ))
 
 (defn done-home-page [dones]
-  (let [dunnits-summary-resp (:body (dunnit/dunnits-summary))
+  (let [dunnits-summary-resp (:body (dunnit/get-messages-summary dunnit/label-dunnit-new))
         messages (select-keys dunnits-summary-resp [:messagesUnread :messagesTotal])]
   (common-layout "Dunnit"
     (done-form "/dunnit" "done")
     (list-title "My Dunnits")
-    (table-list (map str dones))
+    ;(table-list (doall (mapv str dones)))
+    (table-list dones)
     (list-title "Other's Dunnits")
     (table-list @dunnit/other-dones)
     (list-title "Dunnit-labelled Emails")

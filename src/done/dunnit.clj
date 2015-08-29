@@ -3,7 +3,7 @@
     [clojure.data.codec.base64 :as b64]
     [cheshire.core :as json]
     [done.http :as http]
-    [done.gmailauth :refer [get-token]]
+    [done.gmailauth :refer [gmail-api-headers]]
             ))
 
 (def dones (ref []))
@@ -36,25 +36,46 @@
 
 (def api-domain (if (nil? (System/getProperty "gmail-api-domain")) "https://www.googleapis.com/gmail/v1" (System/getProperty "gmail-api-domain")))
 
-(defn history [history-id]
-  (http/gae-get-req-oauth 
-    (str api-domain "/users/me/history?labelId=" label-dunnit-new "&startHistoryId=" history-id)
-    (get-token)))
+(defn history 
+  ([history-id] (history history-id false))
+  ([history-id log?]
+    (http/gae-get-req
+      (str api-domain "/users/me/history?labelId=" label-dunnit-new "&startHistoryId=" history-id)
+      (gmail-api-headers) log?)))
 
-(defn list-all-dunnits [label]
-  (http/gae-get-req-oauth 
-    (str api-domain "/users/me/messages?labelIds=" label)
-    (get-token)))
+(defn get-all-message-ids 
+  ([label] (get-all-message-ids label false))
+  ([label log?]
+  (let [resp (http/gae-get-req
+              (str api-domain "/users/me/messages?labelIds=" label)
+              (gmail-api-headers) log?)
+        messages (get-in resp [:body :messages])
+        message-ids (map :id messages)]
+    message-ids
+  )))
 
-(defn dunnits-summary []
-  (http/gae-get-req-oauth 
-    (str api-domain "/users/me/labels/" label-dunnit-new)
-    (get-token)))
+(defn get-messages-summary 
+  ([label] (get-messages-summary label false))
+  ([label log?]
+    (http/gae-get-req
+      (str api-domain "/users/me/labels/" label)
+    ( gmail-api-headers) log?)))
 
-(defn get-message [message-id]
-  (http/gae-get-req-oauth 
-    (str api-domain "/users/me/messages/" message-id)
-    (get-token)))
+(defn get-message 
+  ([message-id] (get-message message-id false))
+  ([message-id log?]
+    (http/gae-get-req
+      (str api-domain "/users/me/messages/" message-id)
+      (gmail-api-headers) log?)))
+
+(defn modify-message 
+  ([message-id labels-to-remove labels-to-add] (modify-message message-id labels-to-remove labels-to-add false))
+  ([message-id labels-to-remove labels-to-add log?]
+    (http/gae-post-req
+      (str api-domain "/users/me/messages/" message-id "/modify")
+        (json/generate-string {:removeLabelIds labels-to-remove
+                              :addLabelIds labels-to-add })
+        (gmail-api-headers) log?)))
 
 (defn extract-message-content [message]
   (->> (get-in message [:body :payload :parts])
@@ -65,30 +86,34 @@
      )
   )
 
-(defn get-latest-dunnit-messages []
-  (->> (get-in (list-all-dunnits label-dunnit-new) [:body :messages])
-       (map #(get-message (:id %)))
-       (map extract-message-content)))
+(defn get-all-message-content [label]
+  (doall ; to realise the lazy sequences returned by map
+    (->> (get-all-message-ids label)
+         (map #(get-message %))
+         (map extract-message-content))))
 
-(defn process-dunnit [message-id]
-    (let [process-resp (http/gae-post-req-oauth 
-                    (str api-domain "/users/me/messages/" message-id "/modify")
-                        (json/generate-string {"removeLabelIds" ["UNREAD", label-dunnit-new]
-                                               "addLabelIds" [label-dunnit-processed] }) 
-                        (get-token))
-          raw-text (extract-message-content (get-message message-id))
-          new-dones (if (nil? raw-text) [] (clojure.string/split-lines raw-text))]
+(defn email-text-to-dones [text-plain]
+  (if (nil? text-plain) [] (clojure.string/split-lines text-plain)))
+
+(defn process-dunnit 
+  ([message-id] (process-dunnit message-id false))
+  ([message-id log?]
+    (let [process-resp (modify-message message-id ["UNREAD" label-dunnit-new] [label-dunnit-processed] log?)
+        raw-text (extract-message-content (get-message message-id))
+        new-dones (email-text-to-dones raw-text)]
       (persist-in emails {:message-id message-id :text raw-text :dones new-dones})
-      (println "New-dones: " new-dones " nil or empty? "(or (nil? new-dones) (empty? new-dones)))
-      (if (or (nil? new-dones) (empty? new-dones)) [] (map #(persist-in dones %) new-dones))
-    )
+      (if (or (nil? new-dones) (empty? new-dones)) 
+        []
+        (map #(persist-in dones %) new-dones))))
   )
 
 (defn process-previous-dunnit-emails []
-  (->> (get-in (list-all-dunnits label-dunnit-processed) [:body :messages])
-       (map #(process-dunnit (:id %)))))
+  (doall ; force the realisation of lazy sequences i.e. I want my side effects and I want them now please.
+    (->> (get-all-message-ids label-dunnit-processed true)
+       (map #(process-dunnit % true)))))
 
 (defn process-latest-dunnit-emails []
-  (->> (get-in (list-all-dunnits label-dunnit-new) [:body :messages])
-       (map #(process-dunnit (:id %)))))
+  (doall ; force the realisation of lazy sequences i.e. I want my side effects and I want them now please.
+    (->> (get-all-message-ids label-dunnit-new)
+         (map #(process-dunnit %)))))
  

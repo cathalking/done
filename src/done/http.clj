@@ -5,100 +5,58 @@
   (:import (java.net URL)
            (java.io OutputStreamWriter InputStreamReader BufferedReader)))
 
-(defn gae-get-req-oauth [url-str oauth-access-token]
-  (let [url (new URL url-str)
-        http-url-conn (let [connection (. url openConnection)]
-                        (doto connection
-                          (. setRequestProperty "Authorization" (str "Bearer " oauth-access-token))
-                          (. setRequestMethod "GET")))]
-    (let [status (. http-url-conn getResponseCode)]
-      (println "Request: " url-str)
-      (if (= 200 status)
-          {:status 200 
-           :body (walk/keywordize-keys 
-                   (json/parse-string 
-                     (slurp (. http-url-conn getInputStream))))}
-          {:status status 
-           :headers (. http-url-conn getHeaderFields)
-           :response-message (. http-url-conn getResponseMessage) 
-           :body (walk/keywordize-keys 
-                   (json/parse-string 
-                     (slurp (. http-url-conn getErrorStream))))})
-      )
+(defn input-stream-to-map [input-stream]
+  (walk/keywordize-keys (json/parse-string (slurp input-stream))))
+
+(defn handle-response [http-url-conn]
+  (let [status (. http-url-conn getResponseCode)]
+    (if (= 200 status)
+      { :status 200 
+        :body (input-stream-to-map (. http-url-conn getInputStream))}
+      { :status status 
+        :headers (. http-url-conn getHeaderFields)
+        :response-message (. http-url-conn getResponseMessage) 
+        :body (input-stream-to-map (. http-url-conn getErrorStream))})
+        ))
+
+(defn set-headers [connection headers]
+  (doall 
+    (for [header headers] 
+      (doto connection (.setRequestProperty (first header) (second header))))
     )
   )
 
-(defn gae-post-req-oauth [url-str json oauth-access-token]
-  (let [url (new URL url-str)
-        http-url-conn (let [connection (. url openConnection)]
-                        (doto connection
-                          (. setDoOutput true)
-                          (. setRequestProperty "Content-Type" "application/json")
-                          (. setRequestProperty "Authorization" (str "Bearer " oauth-access-token))
-                          (. setRequestMethod "POST")))]
-    (let [output-writer (new OutputStreamWriter (. http-url-conn getOutputStream))]
-      (do
-        (println "Request: " url-str)
-        (doto output-writer (. write json) (. close))
-        (let [status (. http-url-conn getResponseCode)]
-          (if (= 200 status)
-            { :status 200 
-              :body (walk/keywordize-keys
-                     (json/parse-string 
-                       (slurp (. http-url-conn getInputStream))))}
-            { :status status 
-              :headers (. http-url-conn getHeaderFields)
-              :response-message (. http-url-conn getResponseMessage) 
-            :body (walk/keywordize-keys 
-                    (json/parse-string 
-                      (slurp (. http-url-conn getErrorStream))))})
-              )
-        )
-      )
-    )
-  )
+(defn gae-get-req
+  ([url-str headers] (gae-get-req url-str headers true))
+  ([url-str headers log?]
+    (let [http-url-conn (let [connection (. (new URL url-str) openConnection)]
+                          (doto connection
+                            ( . setRequestMethod "GET"))
+                          (set-headers connection headers)
+                          connection)
+        ;status (. http-url-conn getResponseCode)
+        resp (handle-response http-url-conn)] 
+      (when log? (println "Request:" url-str " Response:" resp))
+      resp
+  )))
 
-(defn gae-post-req [url-str payload content-type]
-  (let [url (new URL url-str)
-        http-url-conn (let [connection (. url openConnection)]
+(defn gae-post-req 
+  ([url-str payload headers] (gae-post-req url-str payload headers true))
+  ([url-str payload headers log?]
+   (let [http-url-conn (let [connection (. (new URL url-str) openConnection)]
                         (doto connection
                           (. setDoOutput true)
-                          (. setRequestProperty "Content-Type" content-type)
-                          ;(. setRequestProperty "Authorization" (str "Bearer " oauth-access-token))
-                          (. setRequestMethod "POST")))]
-    (let [output-writer (new OutputStreamWriter (. http-url-conn getOutputStream))]
+                          (. setRequestMethod "POST"))
+                        (set-headers connection headers)
+                        connection)
+        output-writer (new OutputStreamWriter (. http-url-conn getOutputStream))
+        ]
       (do
-        (println "Request: " url-str)
         (doto output-writer (. write payload) (. close))
-        (let [status (. http-url-conn getResponseCode)]
-          (if (= 200 status)
-            { :status 200 
-              :body (walk/keywordize-keys 
-                      (json/parse-string 
-                        (slurp (. http-url-conn getInputStream))))}
-            { :status status 
-              :headers (. http-url-conn getHeaderFields)
-              :response-message (. http-url-conn getResponseMessage) 
-              :body (walk/keywordize-keys 
-                      (json/parse-string 
-                        (slurp (. http-url-conn getErrorStream))))})
-              )
-        )
-      )
-    )
+        (let [resp (handle-response http-url-conn)]
+          (when log? (println "Request:" url-str " Response:" resp))
+          resp
+        )))
+   )
   )
-
-;(defn gae-get-req [url-str]
-;  (let [url (new URL url-str)
-;        http-url-conn (let [connection (. url openConnection)]
-;                        (doto connection
-;                          (. setDoOutput true)
-;                          (. setRequestProperty "Content-Type" "application/json")
-;                          (. setRequestMethod "GET")))]
-;    (println "Request: " url-str)
-;    (let [status (. http-url-conn getResponseCode)
-;          body (json/parse-string (slurp (. http-url-conn getInputStream)))]
-;      {:status status
-;       :body body}
-;    )))
 
