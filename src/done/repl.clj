@@ -26,13 +26,13 @@
     (reset! server
             (serve (get-handler)
                    {:port port
-                    :init (println "gae-app-demo is starting up")
+                    ;:init ("Dunnit is starting up"))
                     :open-browser? false
                     :auto-reload? true
-                    :destroy (println "gae-app-demo is shutting down")
+                    ;:destroy (println "Dunnit is shutting down")
                     :join true}))
-    (load-creds "/var/tmp/creds2.json")
-    (println (str "You can view the site at " (app-path "")))))
+    (load-sys-props "/var/tmp/creds2.json")
+    ))
 
 (defn stop-server []
   (.stop @server)

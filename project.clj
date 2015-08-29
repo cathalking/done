@@ -16,9 +16,7 @@
             [lein-environ "1.0.0"]]
   :ring {:handler done.handler/app}
   :aot :all
-  :profiles { :production {:ring {:open-browser? false, :stacktraces? false, :auto-reload? false}
-                          :jvm-opts ["-Ddomain=done-1041.appspot.com" "-Dprotocol=https" ]}
-              :dev        {:dependencies [[ring-mock "0.1.5"] [ring/ring-devel "1.2.1"]]
-                          :jvm-opts ["-Ddomain=localhost:3000" "-Dprotocol=http" ]}
+  :profiles { :production {:ring {:open-browser? false, :stacktraces? false, :auto-reload? false}}
+              :dev        {:dependencies [[ring-mock "0.1.5"] [ring/ring-devel "1.2.1"]]}
              })
 

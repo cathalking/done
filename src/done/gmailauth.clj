@@ -10,6 +10,7 @@
                   :grant_type (System/getProperty "gmail-api-grant-type")})
 
 (def oauth-token (ref {:access_token nil :expires_in nil}))
+(def google-oauth-api-headers [["Content-Type" "application/x-www-form-urlencoded"]])
 
 (defn as-form-params [m]
   (->> (clojure.walk/stringify-keys m)
@@ -17,18 +18,9 @@
        (clojure.string/join \&))
   )
 
-(defn load-creds [file]
-  (let [creds-map (json/parse-string (slurp file))]
-    (doall
-      (for [[k v] creds-map] (System/setProperty k v)))))
+(defn oauth-form-params [] (as-form-params (oauth-creds)))
 
-(defn oauth-form-params []
-  (as-form-params (oauth-creds)))
-
-(def google-oauth-api-headers [["Content-Type" "application/x-www-form-urlencoded"]])
-
-(defn now [] 
-  (quot (System/currentTimeMillis) 1000))
+(defn now [] (quot (System/currentTimeMillis) 1000))
 
 (defn refresh-oauth-token 
   ([] (refresh-oauth-token false))
