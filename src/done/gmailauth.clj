@@ -2,7 +2,7 @@
   (:require 
     [cheshire.core :as json]
     [done.http :as http]
-    [gmail-clj.core :as gm]))
+     ))
 
 (defn oauth-creds [] {:refresh_token (System/getProperty "gmail-api-refresh-token") 
                   :client_id (System/getProperty "gmail-api-client-id") 

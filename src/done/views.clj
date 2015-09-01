@@ -1,5 +1,6 @@
 (ns done.views
   (:require
+        [clj-time.local :as l]
         [done.dunnit :as dunnit]
         [hiccup.page :refer :all]
         [hiccup.form :refer :all])
@@ -41,6 +42,10 @@
 ;  [:ul.list-group (for [x col] [:li.list-group-item (str x)])]
 ;  ))
 
+(defn format-dones [dones]
+  (for [done (sort #(.isAfter (:date %1) (:date %2)) dones)]
+    (str "(" (l/to-local-date-time (:date done)) ") " (:done done))))
+
 (defn done-home-page [dones]
   (let [dunnits-summary-resp (:body (dunnit/get-messages-summary dunnit/label-dunnit-new))
         messages (select-keys dunnits-summary-resp [:messagesUnread :messagesTotal])]
@@ -48,7 +53,7 @@
     (done-form "/dunnit" "done")
     (list-title "My Dunnits")
     ;(table-list (doall (mapv str dones)))
-    (table-list dones)
+    (table-list (format-dones dones))
     (list-title "Other's Dunnits")
     (table-list @dunnit/other-dones)
     (list-title "Dunnit-labelled Emails")

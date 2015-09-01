@@ -1,13 +1,12 @@
 (ns done.handler
   (:require [compojure.core :refer :all]
             [done.dunnit :as dunnit]
-            [done.gmailauth :as gmailauth]
             [done.views :as views]
             [compojure.route :as route]
             [compojure.handler :as handler]
             [clojure.string :as str]
             [cheshire.core :as json]
-            [gmail-clj.core :as gm]
+            [clj-time.core :as t]
             [ring.util.response :as r]
             [ring.middleware.json :refer [wrap-json-body wrap-json-response]]
             ))
@@ -16,13 +15,13 @@
   (GET "/" [] (r/redirect "/dunnit"))
 
   (GET "/dunnit" []
-    (if (empty? @dunnit/dones) 
-      (views/done-home-page (dunnit/process-previous-dunnit-emails))
-      (views/done-home-page @dunnit/dones)))
+    ;(if (empty? @dunnit/dones) 
+      ;(views/done-home-page (dunnit/process-previous-dunnit-emails))
+      (views/done-home-page @dunnit/dones))
 
   (POST "/dunnit" [done]
     (if (not (clojure.string/blank? done))
-      (dunnit/persist-in dunnit/dones done))
+      (dunnit/persist-in dunnit/dones {:done done :date (t/now)}))
     (r/redirect-after-post "/dunnit"))
 
   (POST "/done" {body :body}
@@ -37,7 +36,6 @@
           (do
             (dunnit/persist-in dunnit/notifications {:gmail-notif gmail-notif :history-api-resp (dunnit/history (:historyId gmail-notif))})
             (dunnit/persist-in dunnit/pub-sub-messages {:gmail-notif gmail-notif, :raw-message (:message pub-sub-message)})
-            (when (empty? @dunnit/dones) (dunnit/process-previous-dunnit-emails))
             (dunnit/process-latest-dunnit-emails)
         ) )
         (r/status 200)
@@ -62,3 +60,8 @@
     (handler/site))
   )
 
+(defn init [] (dunnit/process-previous-dunnit-emails true))
+
+(defn init-local [] 
+  (do (dunnit/load-sys-props "/var/tmp/creds2.json")
+      (dunnit/process-previous-dunnit-emails true)))

@@ -4,6 +4,7 @@
     [cheshire.core :as json]
     [done.http :as http]
     [done.gmailauth :refer [gmail-api-headers]]
+    [clj-time.format :as f]
             ))
 
 (def dones (ref []))
@@ -94,34 +95,60 @@
 (defn email-text-to-dones [text-plain]
   (if (nil? text-plain) [] (clojure.string/split-lines text-plain)))
 
+(defn parse-date [date-str]
+  (try (f/parse (f/formatters :rfc822) (first (clojure.string/split date-str #" \(UTC\)")))
+    (catch Exception e (str "Failed to parse" date-str ". Error was: " (.getMessage e)))))
+
 (defn process-dunnit 
   ([message-id] (process-dunnit message-id false))
   ([message-id log?]
     (let [process-resp (modify-message message-id ["UNREAD" (label-dunnit-new)] [(label-dunnit-processed)] log?)
-        raw-text (extract-message-content (get-message message-id))
-        new-dones (email-text-to-dones raw-text)]
+          email (get-message message-id log?)
+          raw-text (extract-message-content email)
+          headers (get-in email [:body :payload :headers])
+          done-date (parse-date (:value (first (filter #(= (:name %) "Date") headers))))
+          new-dones (email-text-to-dones raw-text)
+          ]
       (persist-in emails {:message-id message-id :text raw-text :dones new-dones})
-      (if (or (nil? new-dones) (empty? new-dones)) 
-        []
-        (map #(persist-in dones %) new-dones))))
-  )
+      ;(if (or (nil? new-dones) (empty? new-dones)) 
+      ;  []
+      ;  (map #(persist-in dones %) new-dones))))
+      (doall (map #(persist-in dones {:done % :date done-date}) new-dones)))
+  ))
 
-(defn process-previous-dunnit [message-id]
-    (let [raw-text (extract-message-content (get-message message-id))
-          new-dones (email-text-to-dones raw-text)]
+(defn process-previous-dunnit 
+  ([message-id] (process-previous-dunnit message-id false))
+  ([message-id log?]
+    (let [email (get-message message-id log?)
+          raw-text (extract-message-content email)
+          headers (get-in email [:body :payload :headers])
+          done-date (parse-date (:value (first (filter #(= (:name %) "Date") headers))))
+          new-dones (email-text-to-dones raw-text)
+          ]
       (persist-in emails {:message-id message-id :text raw-text :dones new-dones})
-      (if (or (nil? new-dones) (empty? new-dones)) 
-        []
-        (map #(persist-in dones %) new-dones)))
-  )
+      ;(if (or (nil? new-dones) (empty? new-dones)) 
+      ;  []
+      (doall (map #(persist-in dones {:done % :date done-date}) new-dones)))
+  ))
 
-(defn process-previous-dunnit-emails []
-  (doall ; force the realisation of lazy sequences i.e. I want my side effects and I want them now please.
-    (->> (get-all-message-ids (label-dunnit-processed) true)
-       (map #(process-previous-dunnit %)))))
+(defn get-all-email-dates []
+  (for [message-id (get-all-message-ids (label-dunnit-processed) false)
+        header (get-in (get-message message-id false) [:body :payload :headers]) 
+        :when (= "Date" (:name header))]
+        (:value header)
+        ))
 
-(defn process-latest-dunnit-emails []
-  (doall ; force the realisation of lazy sequences i.e. I want my side effects and I want them now please.
-    (->> (get-all-message-ids (label-dunnit-new))
-         (map #(process-dunnit % true)))))
+(defn process-previous-dunnit-emails 
+  ([] (process-previous-dunnit-emails false))
+  ([log?] 
+    (doall ; force the realisation of lazy sequences i.e. I want my side effects and I want them now please.
+      (->> (get-all-message-ids (label-dunnit-processed) log?)
+         (map #(process-previous-dunnit % log?))))))
+
+(defn process-latest-dunnit-emails 
+  ([] (process-latest-dunnit-emails false))
+  ([log?]
+    (doall ; force the realisation of lazy sequences i.e. I want my side effects and I want them now please.
+      (->> (get-all-message-ids (label-dunnit-new))
+          (map #(process-dunnit % log?))))))
  

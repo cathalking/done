@@ -1,10 +1,8 @@
 (ns done.repl
-  (:use done.handler
-        done.dunnit
-        done.gmailauth
-        ring.server.standalone
-        [ring.middleware file-info file]
-        ))
+  (:require [done.handler :refer [app init-local]]
+            [done.dunnit :as dunnit])
+  (:use ring.server.standalone
+        [ring.middleware file-info file]))
 
 (defonce server (atom nil))
 
@@ -19,19 +17,23 @@
       ; Content-Type, Content-Length, and Last Modified headers for files in body
       (wrap-file-info)))
 
+(defn init3 [] 
+  (println "init3 called"))
+
 (defn start-server
   "used for starting the server in development mode from REPL"
   [& [port]]
   (let [port (if port (Integer/parseInt port) 3000)]
+    (dunnit/load-sys-props "/var/tmp/creds2.json")
     (reset! server
             (serve (get-handler)
                    {:port port
-                    ;:init ("Dunnit is starting up"))
+                    :init init-local
+                    :stacktraces? true
                     :open-browser? false
                     :auto-reload? true
                     ;:destroy (println "Dunnit is shutting down")
                     :join true}))
-    (load-sys-props "/var/tmp/creds2.json")
     ))
 
 (defn stop-server []
