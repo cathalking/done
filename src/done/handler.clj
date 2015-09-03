@@ -36,7 +36,7 @@
           (do
             (dunnit/persist-in dunnit/notifications {:gmail-notif gmail-notif :history-api-resp (dunnit/history (:historyId gmail-notif))})
             (dunnit/persist-in dunnit/pub-sub-messages {:gmail-notif gmail-notif, :raw-message (:message pub-sub-message)})
-            (dunnit/process-latest-dunnit-emails)
+            (dunnit/process-latest-dunnit-emails true)
         ) )
         (r/status 200)
         (r/header "Content-Type" "application/json"))

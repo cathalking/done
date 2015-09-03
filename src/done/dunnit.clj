@@ -76,14 +76,24 @@
                               :addLabelIds labels-to-add })
         (gmail-api-headers) log?)))
 
-(defn extract-message-content [message]
-  (->> (get-in message [:body :payload :parts])
+(defmulti extract-message-content (fn [email] (get-in email [:body :payload :mimeType])))
+
+(defmethod extract-message-content "multipart/alternative" [email]
+  (->> (get-in email [:body :payload :parts])
       (filter #(= (:mimeType %) "text/plain"))
-      (map #(get-in % [:body :data]))
-      (map decode-msg)
-      (first)
+      first
+      :body 
+      :data
+      decode-msg
      )
   )
+  ;(println "Do multipart/alternative logic with ")) 
+
+(defmethod extract-message-content "text/plain" [email]
+  (->> (get-in email [:body :payload :body :data])
+       decode-msg
+     ))
+  ;(println "Do text/plain logic"))
 
 ; not yet used 
 (defn get-all-message-content [label]
@@ -140,15 +150,15 @@
 
 (defn process-previous-dunnit-emails 
   ([] (process-previous-dunnit-emails false))
-  ([log?] 
-    (doall ; force the realisation of lazy sequences i.e. I want my side effects and I want them now please.
+  ([log?] ; use doall to force the realisation of lazy sequences i.e. I want my side effects and I want them now please.
+    (doall 
       (->> (get-all-message-ids (label-dunnit-processed) log?)
          (map #(process-previous-dunnit % log?))))))
 
 (defn process-latest-dunnit-emails 
   ([] (process-latest-dunnit-emails false))
-  ([log?]
-    (doall ; force the realisation of lazy sequences i.e. I want my side effects and I want them now please.
+  ([log?] ; use doall to force the realisation of lazy sequences i.e. I want my side effects and I want them now please.
+    (doall 
       (->> (get-all-message-ids (label-dunnit-new))
           (map #(process-dunnit % log?))))))
  
