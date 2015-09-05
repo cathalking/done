@@ -11,9 +11,9 @@
 (def notifications (ref []))
 (def pub-sub-messages (ref []))
 (def emails (ref []))
-(def other-dones (ref ["Nothing done"]))
 
 (defn api-domain [] (System/getProperty "gmail-api-domain"))
+(defn label-dunnit-test [] (System/getProperty "label-dunnit-test"))
 (defn label-dunnit-new [] (System/getProperty "label-dunnit-new"))
 (defn label-dunnit-processed [] (System/getProperty "label-dunnit-processed"))
 
@@ -25,9 +25,12 @@
     ))
 
 (defn decode-msg [msg]
-  (->> (b64/decode(.getBytes msg))
+  (try
+    (->> (b64/decode(.getBytes msg))
        (map char)
-       (reduce str)))
+       (reduce str))
+    (catch Exception e "Decoding error"))
+    )
 
 (defn persist-in [col payload]
     (if (or (nil? payload) (empty? payload))
@@ -76,6 +79,10 @@
                               :addLabelIds labels-to-add })
         (gmail-api-headers) log?)))
 
+(defn reset-test-messages []
+  (->> (get-all-message-ids (label-dunnit-test))
+       (map #(modify-message % [(label-dunnit-processed)] [(label-dunnit-new)]))))
+
 (defmulti extract-message-content (fn [email] (get-in email [:body :payload :mimeType])))
 
 (defmethod extract-message-content "multipart/alternative" [email]
@@ -105,40 +112,36 @@
 (defn email-text-to-dones [text-plain]
   (if (nil? text-plain) [] (clojure.string/split-lines text-plain)))
 
+(defn extract-date [date-str]
+  (first (clojure.string/split date-str #" \(UTC\)")))
+
+(defn keywordize-kvps [m]
+  (into {}
+        (mapcat #(assoc {} (keyword (:name %)) (:value %)) m)))
+
 (defn parse-date [date-str]
-  (try (f/parse (f/formatters :rfc822) (first (clojure.string/split date-str #" \(UTC\)")))
+  (try (f/parse (f/formatters :rfc822) date-str)
     (catch Exception e (str "Failed to parse" date-str ". Error was: " (.getMessage e)))))
 
 (defn process-dunnit 
-  ([message-id] (process-dunnit message-id false))
-  ([message-id log?]
-    (let [process-resp (modify-message message-id ["UNREAD" (label-dunnit-new)] [(label-dunnit-processed)] log?)
-          email (get-message message-id log?)
-          raw-text (extract-message-content email)
-          headers (get-in email [:body :payload :headers])
-          done-date (parse-date (:value (first (filter #(= (:name %) "Date") headers))))
-          new-dones (email-text-to-dones raw-text)
-          ]
-      (persist-in emails {:message-id message-id :text raw-text :dones new-dones})
-      ;(if (or (nil? new-dones) (empty? new-dones)) 
-      ;  []
-      ;  (map #(persist-in dones %) new-dones))))
-      (doall (map #(persist-in dones {:done % :date done-date}) new-dones)))
-  ))
+  ([message-id] (process-dunnit message-id false false))
+  ([message-id process?] (process-dunnit message-id process? false))
 
-(defn process-previous-dunnit 
-  ([message-id] (process-previous-dunnit message-id false))
-  ([message-id log?]
+  ([message-id process? log?]
     (let [email (get-message message-id log?)
           raw-text (extract-message-content email)
-          headers (get-in email [:body :payload :headers])
-          done-date (parse-date (:value (first (filter #(= (:name %) "Date") headers))))
+          headers (->> (get-in email [:body :payload :headers]) keywordize-kvps)
           new-dones (email-text-to-dones raw-text)
           ]
+      (when process? (modify-message message-id ["UNREAD" (label-dunnit-new)] [(label-dunnit-processed)] log?))
       (persist-in emails {:message-id message-id :text raw-text :dones new-dones})
-      ;(if (or (nil? new-dones) (empty? new-dones)) 
-      ;  []
-      (doall (map #(persist-in dones {:done % :date done-date}) new-dones)))
+      (doall (map #(persist-in dones 
+                               {:done % 
+                                :message-id message-id
+                                :date (parse-date (extract-date (:Date headers)))
+                                :from (-> (:From headers) (clojure.string/split #" \<") second (clojure.string/split #"\>") first)
+                                :client (:X-Mailer headers)})
+                  new-dones)))
   ))
 
 (defn get-all-email-dates []
@@ -153,12 +156,12 @@
   ([log?] ; use doall to force the realisation of lazy sequences i.e. I want my side effects and I want them now please.
     (doall 
       (->> (get-all-message-ids (label-dunnit-processed) log?)
-         (map #(process-previous-dunnit % log?))))))
+         (map #(process-dunnit % false log?))))))
 
 (defn process-latest-dunnit-emails 
   ([] (process-latest-dunnit-emails false))
   ([log?] ; use doall to force the realisation of lazy sequences i.e. I want my side effects and I want them now please.
     (doall 
       (->> (get-all-message-ids (label-dunnit-new))
-          (map #(process-dunnit % log?))))))
+          (map #(process-dunnit % true log?))))))
  

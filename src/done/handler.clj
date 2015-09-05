@@ -1,6 +1,7 @@
 (ns done.handler
   (:require [compojure.core :refer :all]
             [done.dunnit :as dunnit]
+            [done.gmailauth :as gmailauth]
             [done.views :as views]
             [compojure.route :as route]
             [compojure.handler :as handler]
@@ -15,13 +16,11 @@
   (GET "/" [] (r/redirect "/dunnit"))
 
   (GET "/dunnit" []
-    ;(if (empty? @dunnit/dones) 
-      ;(views/done-home-page (dunnit/process-previous-dunnit-emails))
       (views/done-home-page @dunnit/dones))
 
   (POST "/dunnit" [done]
     (if (not (clojure.string/blank? done))
-      (dunnit/persist-in dunnit/dones {:done done :date (t/now)}))
+      (dunnit/persist-in dunnit/dones {:done done :message-id "N/A" :date (t/now) :from "Logged in user" :client "Dunnit Website"}))
     (r/redirect-after-post "/dunnit"))
 
   (POST "/done" {body :body}
@@ -36,8 +35,7 @@
           (do
             (dunnit/persist-in dunnit/notifications {:gmail-notif gmail-notif :history-api-resp (dunnit/history (:historyId gmail-notif))})
             (dunnit/persist-in dunnit/pub-sub-messages {:gmail-notif gmail-notif, :raw-message (:message pub-sub-message)})
-            (dunnit/process-latest-dunnit-emails true)
-        ) )
+            (str "Processed " (count (dunnit/process-latest-dunnit-emails true)) " new dones")))
         (r/status 200)
         (r/header "Content-Type" "application/json"))
        (->
@@ -45,9 +43,9 @@
          (r/status 400)
          (r/header "Content-Type" "application/json"))
      )
-   ))
-
- )
+    )
+  )
+)
 
 (defroutes standard-routes
            (route/resources "/")

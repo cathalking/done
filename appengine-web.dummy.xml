@@ -5,8 +5,9 @@
   <!-- <static-files /> -->
   <!-- <resource-files /> -->
 <system-properties>
-	<property name="domain" value="<your-app-domain>" />
-  <property name="protocol" value="https" />
+  <property name="label-dunnit-test" value="???" />
+  <property name="label-dunnit-new" value="???" />
+  <property name="label-dunnit-processed" value="???" />
   <property name="gmail-api-domain" value="https://www.googleapis.com/gmail/v1" />
   <property name="gmail-api-grant-type" value="refresh_token" />
   <property name="gmail-api-client-id" value="<download details from Google App Engine Developer Console>" />
