@@ -8,14 +8,10 @@
         [hiccup.form :refer :all])
   )
 
-(defn sorted-dones [dones]
-  (sort #(.isAfter (:date %1) (:date %2)) dones))
-
 (defn common-layout [title & body]
   (html5
     [:head
      (include-css "https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css")
-     ;[:link {:rel "stylesheet" :href "https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css" :type "text/css"}]
      [:title title]]
     [:body
      [:div.container
@@ -32,55 +28,65 @@
       [:button.btn.btn-default {:type "submit"} "Dunnit!"]]]
     ))
 
-(defn table-list 
-  ([col] (table-list col str))
-  ([col f]
-    [:ul.list-group (for [x col] [:li.list-group-item (f x)])]))
+(defn list-title [title]
+  (conj [:h2#content-title ] title))
 
-(defn table [dones]
+(defn default-col-frmtrs [coll] 
+  (for [k (keys (first coll))] [k str]))
+
+(defn table [coll cols]
+  (let [cols-map (into {} cols)]
    [:table.table.table-bordered.table-hover.table-condensed
      [:tr 
-      [:th "Dunwhen?"] 
-      [:th "Dunwat?"] 
-      [:th "Dunster"]
-      [:th "Email Id"] 
+      (for [[col-header _] cols]
+        [:th (clojure.string/capitalize (name col-header))] )
       ]
-      (for [d dones] 
-        (let [tr (if (or 
-                       (nil? (:date d))
-                       (nil? (:from d))
-                       (nil? (:message-id d))
-                       (nil? (:done d))
-                       (= "Decoding error" (:done d))
-                       ) 
-                   :tr.danger :tr)]
-          [tr
-            [:td (tf/unparse (tf/formatter "MMM dd HH:mm") (:date d))] 
-            [:td (:done d)] 
-            [:td (hu/escape-html (:from d))] 
-            [:td (:message-id d)] 
-          ]))])
+      (for [d coll] 
+        [:tr
+          (for [k (map #(first %) cols)]
+            [:td ((get cols-map k) (get d k))])
+        ])]))
 
-(defn table-per-person [[person dones]]
-   [:table.table.table-bordered.table-hover.table-condensed
-     [:tr 
-      [:th "Dunwhen?"] 
-      [:th "Dunwat?"] 
-      [:th "Email Id"] 
-      ]
-      (for [d dones] 
-        (let [tr (if (or 
-                       (nil? (:date d))
-                       (nil? (:message-id d))
-                       (nil? (:done d))
-                       (= "Decoding error" (:done d))
-                       ) 
-                   :tr.danger :tr)]
-          [tr
-            [:td (tf/unparse (tf/formatter "MMM dd HH:mm") (:date d))] 
-            [:td (:done d)] 
-            [:td (:message-id d)] 
-          ]))])
+(defn grouping-tables-by 
+  ([f coll] (grouping-tables-by f coll (default-col-frmtrs coll) str compare))
+  ([f coll cols] (grouping-tables-by f coll cols str compare))
+  ([f coll cols title-frmtr] (grouping-tables-by f coll cols title-frmtr compare))
+  ([f coll cols title-frmtr comprtr]
+    (mapcat #(into [] %)
+      (for [group (group-by f coll)]
+        [(list-title (title-frmtr (first group)))
+         (table (second group) cols)]))))
+
+(defn form-list
+  [action input-fields submit-text]
+   [:form {:action action :method "post"}
+    (for [i input-fields] [(keyword (str "input#" (:name i))) {:type "text" :name (:name i) :placeholder (:label i)}])
+    [:button {:type "submit"} submit-text]])
+
+(defn fmt-date 
+  ([date] (fmt-date "MMM dd" date))
+  ([patt date] (tf/unparse (tf/formatter patt) date)))
+
+(defn date-comparator [d1 d2] (.isAfter (:date d1) (:date d2)))
+
+(defn sorted-dones [dones]
+  (sort date-comparator dones))
+
+(defn day [d]
+  (fmt-date "MMM dd" (:date d)))
+
+(defn done-home-page [dones]
+  (let [dones (sorted-dones dones)]
+    (common-layout "Dunnit"
+      (done-form "/dunnit" "done")
+      [:h1 "By WhoDunnit"]
+      (grouping-tables-by :from dones [[:date (partial fmt-date "MMM dd")] [:done str] [:message-id str]])
+      [:h1 "By Dundate"]
+      (grouping-tables-by day dones [[:date (partial fmt-date "HH:mm")] [:done str] [:message-id str]] str date-comparator)
+      (list-title "All Dunnits")
+      (table dones (default-col-frmtrs dones))
+      )
+  ))
 
 (defn table-per-date [[date dones]]
    [:table.table.table-bordered.table-hover.table-condensed
@@ -104,63 +110,3 @@
             [:td (:from d)] 
             [:td (:message-id d)] 
           ]))])
-
-
-(defn list-title [title]
-  (conj [:h2#content-title ] title))
-
-(defn group-by-date [dones]
-  (mapcat #(into [] %)
-    (for [group (group-by #(tf/unparse (tf/formatter "MMM dd") (:date %)) dones)]
-      [(list-title (first group))
-        (table-per-date group)])))
-
-(defn group-by-person [dones]
-  (mapcat #(into [] %)
-    (for [group (group-by :from dones)]
-      [(list-title (first group))
-        (table-per-person group)])))
-
-(defn form-list
-  [action input-fields submit-text]
-   [:form {:action action :method "post"}
-    (for [i input-fields] [(keyword (str "input#" (:name i))) {:type "text" :name (:name i) :placeholder (:label i)}])
-    [:button {:type "submit"} submit-text]])
-
-;(defn table ([title col]
-;  [:h2#content-title title]
-;  [:ul.list-group (for [x col] [:li.list-group-item (str x)])]
-;  ))
-
-(defn format-dones [dones]
-  (for [done (sort #(.isAfter (:date %1) (:date %2)) dones)]
-    (str "(" (tl/to-local-date-time (:date done)) ") " 
-         (:done done)
-         " (" (:from done) ")"
-         " (" (:client done) ")"
-         )))
-
-(defn done-home-page [dones]
-  (let [dunnits-summary-resp (:body (dunnit/get-messages-summary dunnit/label-dunnit-new))
-        messages (select-keys dunnits-summary-resp [:messagesUnread :messagesTotal])]
-  (common-layout "Dunnit"
-    ;[:h1#content-title "Dunnit"]
-    (done-form "/dunnit" "done")
-    [:h1 "By Dunster"]
-    (group-by-person (sorted-dones dones))
-    (list-title "By DunDate")
-    (group-by-date (sorted-dones dones))
-    (list-title "All Dunnits")
-    (table (sorted-dones dones))
-    ;(list-title "Dunnit-labelled Emails")
-    ;(table-list {:unprocessed-messages (get messages :messagesTotal)})
-    ;(done-form "/processdunnit" "messageid")
-    ;(list-title "Emails pulled using Notifications")
-    ;(table-list @dunnit/emails)
-    ;(list-title "Gmail API Notifications")
-    ;(table-list @dunnit/notifications)
-    ;(list-title "Pub-Sub Messages")
-    ;(table-list @dunnit/pub-sub-messages)
-    )
-  )
- )

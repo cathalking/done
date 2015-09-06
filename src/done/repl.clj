@@ -17,9 +17,6 @@
       ; Content-Type, Content-Length, and Last Modified headers for files in body
       (wrap-file-info)))
 
-(defn init3 [] 
-  (println "init3 called"))
-
 (defn start-server
   "used for starting the server in development mode from REPL"
   [& [port]]

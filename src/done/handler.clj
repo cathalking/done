@@ -33,7 +33,7 @@
        (->
         (r/response 
           (do
-            (dunnit/persist-in dunnit/notifications {:gmail-notif gmail-notif :history-api-resp (dunnit/history (:historyId gmail-notif))})
+            ;(dunnit/persist-in dunnit/notifications {:gmail-notif gmail-notif :history-api-resp (online/history (:historyId gmail-notif) (dunnit/label-dunnit-new))})
             (dunnit/persist-in dunnit/pub-sub-messages {:gmail-notif gmail-notif, :raw-message (:message pub-sub-message)})
             (str "Processed " (count (dunnit/process-latest-dunnit-emails true)) " new dones")))
         (r/status 200)
