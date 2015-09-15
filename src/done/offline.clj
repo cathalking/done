@@ -1,7 +1,6 @@
 (ns done.offline
   (:require 
     [cheshire.core :as json]
-    [done.dunnit :as dunnit]
             ))
 
 (def all-emails 
@@ -32,3 +31,6 @@
   ([message-id labels-to-remove labels-to-add] (modify-message message-id labels-to-remove labels-to-add false))
   ([message-id labels-to-remove labels-to-add log?]
     (println "Modified message" message-id)))
+
+(def sys-props-file "/var/tmp/creds2.json")
+

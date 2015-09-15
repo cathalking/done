@@ -34,7 +34,6 @@
                             ( . setRequestMethod "GET"))
                           (set-headers connection headers)
                           connection)
-        ;status (. http-url-conn getResponseCode)
         resp (handle-response http-url-conn)] 
       (when log? (println "Request:" url-str " Response:" resp))
       resp

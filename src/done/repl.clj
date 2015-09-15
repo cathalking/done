@@ -1,6 +1,7 @@
 (ns done.repl
-  (:require [done.handler :refer [app init-local]]
-            [done.dunnit :as dunnit])
+  (:require 
+            [done.handler :refer [app init-local]]
+            )
   (:use ring.server.standalone
         [ring.middleware file-info file]))
 
@@ -21,7 +22,6 @@
   "used for starting the server in development mode from REPL"
   [& [port]]
   (let [port (if port (Integer/parseInt port) 3000)]
-    (dunnit/load-sys-props "/var/tmp/creds2.json")
     (reset! server
             (serve (get-handler)
                    {:port port

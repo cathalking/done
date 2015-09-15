@@ -4,6 +4,7 @@
     [cheshire.core :as json]
     [done.http :as http]
     [done.online :refer :all]
+    ;[done.offline :refer :all]
     [done.gmailauth :refer [gmail-api-headers]]
     [clj-time.format :as f]
             ))
@@ -26,7 +27,15 @@
 
 (defn decode-msg [msg]
   (try
-    (->> (b64/decode(.getBytes msg))
+    (->> (b64/decode (.getBytes msg))
+       (map char)
+       (reduce str))
+    (catch Exception e "Decoding error"))
+    )
+
+(defn decode-msg2 [msg]
+  (try
+    (->> (b64/decode ((.getBytes "UTF-8") msg))
        (map char)
        (reduce str))
     (catch Exception e "Decoding error"))
@@ -42,6 +51,8 @@
   (->> (get-all-message-ids (label-dunnit-test))
        (map #(modify-message % [(label-dunnit-processed)] [(label-dunnit-new)]))))
 
+(defn seq-contains? [coll target] (some #(= target %) coll))
+
 (defmulti extract-message-content (fn [email] (get-in email [:body :payload :mimeType])))
 
 (defmethod extract-message-content "multipart/alternative" [email]
@@ -52,8 +63,6 @@
       :data
       decode-msg
      ))
-
-(defn seq-contains? [coll target] (some #(= target %) coll))
 
 (defmethod extract-message-content "text/plain" [email]
   (->> (get-in email [:body :payload :body :data])
@@ -90,14 +99,17 @@
           headers (->> (get-in email [:body :payload :headers]) keywordize-kvps)
           new-dones (email-text-to-dones raw-text)
           ]
-      (when process? (modify-message message-id ["UNREAD" (label-dunnit-new)] [(label-dunnit-processed)] log?))
+      (when process? (modify-message message-id ["INBOX" "UNREAD" (label-dunnit-new)] [(label-dunnit-processed)] log?))
       (persist-in emails {:message-id message-id :text raw-text :dones new-dones})
       (doall (map #(persist-in dones 
                                {:done % 
                                 :message-id message-id
                                 :date (parse-date (extract-date (:Date headers)))
                                 :from (-> (:From headers) (clojure.string/split #" \<") second (clojure.string/split #"\>") first)
-                                :client (:X-Mailer headers)})
+                                :client (:X-Mailer headers)
+                                :content-type (:Content-Type headers)
+                                :content-encoding (:Content-Transfer-Encoding headers)
+                                })
                   new-dones)))
   ))
 
