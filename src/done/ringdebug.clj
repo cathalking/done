@@ -20,16 +20,18 @@
 
 
 ;; I have taken the liberty of removing some of the less fascinating entries from the request and response maps, for clarity
-(def kill-keys [:body :character-encoding :remote-addr :server-name :server-port :ssl-client-cert :scheme  :content-type  :content-length])
-(def kill-headers ["user-agent" "accept" "accept-encoding" "accept-language" "accept-charset" "cache-control" "connection"])
+;(def kill-keys [:body :character-encoding :remote-addr :server-name :server-port :ssl-client-cert :scheme  :content-type  :content-length])
+(def kill-keys [])
+;(def kill-headers ["user-agent" "accept" "accept-encoding" "accept-language" "accept-charset" "cache-control" "connection"])
+(def kill-headers [])
 
-(defn wrap-spy [handler spyname]
+(defn wrap-spy [handler spyname & {:keys [log-req log-resp] :or {log-req true log-resp false}}]
   (fn [request]
     (let [incoming (format-request (str spyname ":\n Incoming Request:") request kill-keys kill-headers)]
-      (println incoming)
+      (when log-req (println incoming))
       (let [response (handler request)]
         (let [outgoing (format-request (str spyname ":\n Outgoing Response Map:") response kill-keys kill-headers)]
-          (println outgoing)
+          (when log-resp (println outgoing))
           response
           ;(update-in response  [:body] (fn[x] (str (html-preformatted-escape incoming) x  (html-preformatted-escape outgoing))))
           )))))

@@ -2,6 +2,7 @@
   (:require
         [clj-time.local :as tl]
         [clj-time.format :as tf]
+        [clj-time.coerce :as tc]
         [done.dunnit :as dunnit]
         [hiccup.page :refer :all]
         [hiccup.util :as hu]
@@ -123,10 +124,22 @@
       ]
     )])
 
+(defn grouping-tables-by3 [& the-varargs]
+;vargs [:group-by-fn day :coll dones :display-cols {:some "thing"} :title-frmtr str :sort-comprtr date-comprtr]
+  (let [{
+         group-by-fn :group-by-fn
+         coll :coll
+         display-cols :display-cols
+         title-frmtr :title-frmtr
+         sort-comprtr :sort-comprtr} the-varargs]
+    (mapcat #(into [] %)
+      (for [[group-key group] (group-by group-by-fn coll)]
+        [(list-title (title-frmtr group-key))
+         (table2 :data group :display-cols display-cols)]))))
+
 (defn grouping-tables-by2 
   [& {:keys [group-by-fn coll display-cols title-frmtr sort-comprtr]
-        :or {display-cols (default-col-frmtrs (first @done.dunnit/dones)) 
-             title-frmtr str 
+        :or {title-frmtr str 
              sort-cmprtr compare}}]
     (mapcat #(into [] %)
       (for [[group-key group] (group-by group-by-fn coll)]
@@ -144,11 +157,11 @@
          (table (second group) cols)]))))
 
 (defn fmt-date 
-  ([date] (fmt-date "MMM dd" date))
-  ([patt date] (tf/unparse (tf/formatter patt) date)))
+  ([date] (fmt-date "MMM dd" (tc/from-date date)))
+  ([patt date] (tf/unparse (tf/formatter patt) (tc/from-date date))))
 
 (defn date-comparator [d1 d2] 
-  (.isAfter (:date d1) (:date d2)))
+  (.isAfter (tc/from-date (:date d1)) (tc/from-date (:date d2))))
 
 (defn sorted-dones [dones]
   (sort date-comparator dones))
@@ -156,10 +169,10 @@
 (defn day [d]
   (fmt-date "MMM dd" (:date d)))
 
-(defn login-page [redirect-url]
+(defn login-page []
   (common-layout "Dunnit" false
     [:h1 "Login"]
-    [:form.form-horizontal {:action (str "/login?redirect-to=" redirect-url) :method "post"}
+    [:form.form-horizontal {:action "/login" :method "post"}
       [:div.form-group
         [:label.col-sm-2.control-label "Username"]
         [:div.col-sm-3
@@ -174,9 +187,27 @@
     ]
   ))
 
+(defn login-page-google []
+  (common-layout "Dunnit" false
+    [:h1 "Login"]
+    [:a.btn.btn-default.btn-lg {:href "/oauth2/google"} "Login with Google"]
+  ))
+
+(defn persist-test [] 
+  (common-layout "Persist Test" true
+    [:h1 "Create Entity"]
+    [:form.form-horizontal {:action "/persist" :method "post"}
+      [:div.form-group
+        [:label.col-sm-2.control-label "Create Entity"]
+        [:div.col-sm-5
+          [:input.form-control {:type "text" :name "done" :placeholder "I know he used to do sh*t.. but wat has he dun for u lately!?"}]
+        ]
+      ]]
+  ))
+
 (defn custom-table-creator [& {:keys [dones tables]}]
   (let [dones (sorted-dones dones)
-        done-fields (->> (first @done.dunnit/dones) keys)
+        done-fields (->> (first dones) keys)
         grouped-tables (filter #(not (nil? (:grouping (val %)))) tables)
         flat-tables (filter #(nil? (:grouping (val %))) tables)]
     (common-layout "Dunnit" true
@@ -243,10 +274,14 @@
       )
   ))
 
-(defn done-home-page [& {:keys [dones]}]
+(defn done-home-page [& {:keys [dones user-details]}]
   (let [dones (sorted-dones dones)
-        done-fields (->> (first @done.dunnit/dones) keys)]
+        done-fields (->> (first dones) keys)]
     (common-layout "Dunnit" true
+      [:div.container
+        [:h1 "Welcome " (:given_name user-details)]
+        [:img.img-responsive.img-thumbnail {:src (:picture user-details) :style "width: 100px; height: 100px;"}]
+      ]
       [:h1 "Dun owt?"]
       (done-form "/dunnit" "done")
       ;[:h1 "By WhoDunnit"]
@@ -260,9 +295,11 @@
       ;[:h1 "By Dundate"]
       ;(grouping-tables-by day dones  [[:date (partial fmt-date "HH:mm")] [:done str] [:message-id str]] str date-comparator)
       [:h1 "By Dundate"]
-      (grouping-tables-by2 :group-by-fn day 
+      (grouping-tables-by3 
+                           :group-by-fn day 
                            :coll dones 
                            :display-cols {:date (partial fmt-date "HH:mm") 
+                                          :from str
                                           :done str
                                           :message-id str} 
                            :title-frmtr str 

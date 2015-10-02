@@ -3,7 +3,7 @@
     [clojure.data.codec.base64 :as b64]
     [cheshire.core :as json]
     [done.http :as http]
-    [done.gmailauth :refer [gmail-api-headers]]
+    [done.googleoauth :refer [gmail-api-headers]]
     [clj-time.format :as f]
             ))
 

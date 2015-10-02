@@ -1,19 +1,23 @@
 (ns done.dunnit
   (:require 
-    [clojure.data.codec.base64 :as b64]
-    [cheshire.core :as json]
-    [done.http :as http]
     [done.online :refer :all]
     ;[done.offline :refer :all]
-    [done.gmailauth :refer [gmail-api-headers]]
-    [clj-time.format :as f]
+    [done.http :as http]
+    [done.in-memory :as persist]
+    [done.dummy-cache :as cache]
+    ;[done.datastore :as persist]
+    ;[done.cache :as cache]
+    [clojure.data.codec.base64 :as b64]
+    [cheshire.core :as json]
+    [clj-time.format :as tf]
+    [clj-time.coerce :as tc]
             ))
 
-(def dones (ref []))
-(def notifications (ref []))
-(def pub-sub-messages (ref []))
-(def emails (ref []))
+;(def notifications (ref []))
+;(def pub-sub-messages (ref []))
+;(def emails (ref []))
 
+(defn app-domain [] (System/getProperty "app-domain"))
 (defn label-dunnit-test [] (System/getProperty "label-dunnit-test"))
 (defn label-dunnit-new [] (System/getProperty "label-dunnit-new"))
 (defn label-dunnit-processed [] (System/getProperty "label-dunnit-processed"))
@@ -39,12 +43,6 @@
        (map char)
        (reduce str))
     (catch Exception e "Decoding error"))
-    )
-
-(defn persist-in [col payload]
-    (if (or (nil? payload) (empty? payload))
-      @col 
-      (dosync (alter col conj payload)))
     )
 
 (defn reset-test-messages []
@@ -87,7 +85,7 @@
         (mapcat #(assoc {} (keyword (:name %)) (:value %)) m)))
 
 (defn parse-date [date-str]
-  (try (f/parse (f/formatters :rfc822) date-str)
+  (try (tf/parse (tf/formatters :rfc822) date-str)
     (catch Exception e (str "Failed to parse" date-str ". Error was: " (.getMessage e)))))
 
 (defn process-dunnit 
@@ -100,16 +98,19 @@
           new-dones (email-text-to-dones raw-text)
           ]
       (when process? (modify-message message-id ["INBOX" "UNREAD" (label-dunnit-new)] [(label-dunnit-processed)] log?))
-      (persist-in emails {:message-id message-id :text raw-text :dones new-dones})
-      (doall (map #(persist-in dones 
-                               {:done % 
+      (doall (map 
+                  #(let [done { :kind "done"
+                                :done % 
                                 :message-id message-id
-                                :date (parse-date (extract-date (:Date headers)))
+                                :date (tc/to-date (parse-date (extract-date (:Date headers))))
+                                ;:date (parse-date (extract-date (:Date headers)))
                                 :from (-> (:From headers) (clojure.string/split #" \<") second (clojure.string/split #"\>") first)
                                 :client (:X-Mailer headers)
                                 :content-type (:Content-Type headers)
-                                :content-encoding (:Content-Transfer-Encoding headers)
-                                })
+                                :content-encoding (:Content-Transfer-Encoding headers)}]
+                      (persist/create done)
+                      (cache/add (:message-id done) done)
+                    )
                   new-dones)))
   ))
 
@@ -131,6 +132,13 @@
   ([] (process-latest-dunnit-emails false))
   ([log?] ; use doall to force the realisation of lazy sequences i.e. I want my side effects and I want them now please.
     (doall 
-      (->> (get-all-message-ids (label-dunnit-new))
+      (->> (get-all-message-ids (label-dunnit-new) log?)
           (map #(process-dunnit % true log?))))))
  
+(defn all-dones []
+  (persist/find-all))
+
+(defn add [done]
+  (do 
+    (cache/add (str (:username done) (System/currentTimeMillis)) done)
+    (persist/create done)))

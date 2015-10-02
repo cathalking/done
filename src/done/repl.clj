@@ -1,6 +1,6 @@
 (ns done.repl
   (:require 
-            [done.handler :refer [app init-local]]
+            [done.handler :refer [app init-local destroy-local]]
             )
   (:use ring.server.standalone
         [ring.middleware file-info file]))
@@ -29,7 +29,7 @@
                     :stacktraces? true
                     :open-browser? false
                     :auto-reload? true
-                    ;:destroy (println "Dunnit is shutting down")
+                    :destroy destroy-local
                     :join true}))
     ))
 

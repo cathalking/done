@@ -1,48 +1,248 @@
 (ns done.handler
-  (:require [compojure.core :refer :all]
+  (:require 
             [done.dunnit :as dunnit]
             [done.online :refer [sys-props-file]]
             ;[done.offline :refer [sys-props-file]]
-            [done.gmailauth :as gmailauth]
+            [done.googleoauth :as googleoauth]
             [done.views :as views]
             [done.ringdebug :as rd]
-            [compojure.route :as route]
-            [compojure.handler :as handler]
-            [clojure.string :as str]
+            ;[done.cache :as cache]
+            [done.google-login :as google-login]
             [cheshire.core :as json]
             [clj-time.core :as t]
+            [clj-time.coerce :as tc]
+            [clojure.core.match :refer [match]]
+            [compojure.core :refer [GET POST routes defroutes]]
+            [compojure.route :as route]
+            ;[compojure.handler :as handler]
             [ring.util.response :as r]
+            [ring.middleware json session keyword-params flash multipart-params params nested-params]
             [ring.middleware.json :refer [wrap-json-body wrap-json-response]]
+            [ring.middleware.session :refer [wrap-session]]
+            [ring.middleware.keyword-params :refer [wrap-keyword-params]]
+            [ring.middleware.flash :refer [wrap-flash]]
+            [ring.middleware.multipart-params :refer [wrap-multipart-params]]
+            [ring.middleware.params :refer [wrap-params]]
+            [ring.middleware.nested-params :refer [wrap-nested-params]]
             ))
+
+(defn show-login-page [{:keys [flash]}] 
+  {:status 200
+   :body (views/login-page-google)
+   :flash flash
+  })
+
+(defn logout-user [_] 
+  {:status 302
+   :session nil
+   :headers {"Location" "/login"}
+  })
+
+(def logout-user-after-macroexpand
+  (compojure.core/make-route :get 
+    (clout.core/route-compile "/logout") 
+    #(compojure.core/let-request [_ %] {:status 302, :session nil, :headers {"Location" "/login"}})))
+
+(defn show-dunnit-homepage [{:keys [session]}]
+  {:status 200
+   :body (views/done-home-page 
+            :dones (dunnit/all-dones) 
+            :user-details (:user-details session))
+  })
+
+(defn process-submitted-done [{:keys [session params]}]
+  (if (not (clojure.string/blank? (:done params)))
+    (dunnit/add {:kind "done" :done (:done params) :message-id "N/A" :date (tc/to-date (t/now)) :from (:username session) :client "Dunnit Website"}))
+  {:status 303
+   :headers {"Location" "/dunnit"}
+  })
 
 (def tables (ref {}))
 
+(defn show-customtables [_]
+  {:status 200
+   :body (views/custom-table-creator :dones (dunnit/all-dones) :tables @tables)
+  })
+
+(defn create-customtable [{:keys [form-params]}]
+  (let [cols (-> (dissoc form-params "title")
+                 (dissoc "grouping")
+                 clojure.walk/keywordize-keys
+                 keys)
+        table-title (get form-params "title")
+        grouping (get form-params "grouping")]    
+    (do
+      (dosync 
+        (alter tables assoc 
+               table-title
+               {:cols cols :grouping grouping}
+                    ))
+        (r/redirect-after-post "/customtables")
+    )
+  ))
+
+(defn process-done-inbox-notification [{body :body}]
+  (let [data  (get-in body [:message :data])
+        gmail-notif (json/parse-string (dunnit/decode-msg data) true)]
+    (if (not (empty? gmail-notif))
+      (->
+        (r/response 
+          (do
+            (str "Processed " (count (dunnit/process-latest-dunnit-emails true)) " new dones")))
+        (r/status 200)
+        (r/header "Content-Type" "application/json"))
+      (->
+        (r/response "Message must be non-empty")
+        (r/status 400)
+        (r/header "Content-Type" "application/json"))
+    )
+  ))
+
+(defn show-authorization-request-page [{:keys [flash]}] 
+  {:status 303
+   :headers {"Location" (google-login/request-user-to-authorize
+                          :client_id (:client_id (googleoauth/oauth2-web-app-creds)) 
+                          :original-uri (if (nil? (:redirect-to flash)) "/dunnit" (:redirect-to flash))
+                          :scopes ["email" "profile"])}
+  })
+
+(defn authorization-callback [{:keys [query-params cookies session]}]
+  (let [auth-code (get query-params "code")
+        redirect-uri (get query-params "state")
+        access-token-resp (google-login/request-access-token auth-code)
+        user-details (:body (google-login/request-user-details (get-in access-token-resp [:body :access_token])))]
+    {:status 303
+     :headers {"Location" redirect-uri}
+     :session (assoc session :user-details user-details)}
+  ))
+
+(defn show-user-details [{:keys [session]}]
+  {:status 200
+   :body (:user-details session)
+  })
+
+(defn redirect-via [&{:keys [to via]}]
+  (fn [req]
+    {:status 303 
+   :flash {:redirect-to to}
+   :headers {"Location" via}
+  }))
+
+(defn redirect [uri]
+  (fn [req]
+    {:status 303 
+     :headers {"Location" uri}
+    }))
+
+(defn routing-handler [handler]
+  (fn [req]
+    (let [matched-handler 
+            (match req
+              {:request-method _, :uri uri, :auth-needed? true} (redirect-via :via "/login" :to uri)
+              {:request-method :get, :uri "/"} (redirect "/dunnit")
+              {:request-method :post, :uri "/done"} process-done-inbox-notification
+              {:request-method :get, :uri "/login"} show-login-page
+              {:request-method :get, :uri "/logout"} logout-user
+              {:request-method :get, :uri "/dunnit"} show-dunnit-homepage
+              {:request-method :post, :uri "/dunnit"} process-submitted-done
+              {:request-method :get, :uri "/customtables"} show-customtables
+              {:request-method :post, :uri "/customtables"} create-customtable
+              {:request-method :get, :uri "/oauth2/google"} show-authorization-request-page
+              {:request-method :get, :uri "/oauth2/callback"} authorization-callback
+              {:request-method :get, :uri "/oauth2/userdetails"} show-user-details
+              ;{:request-method :get, :uri "/stats"} show-memcache-stats
+              :else handler)]
+      (matched-handler req)
+    )
+  ))
+
+(def unauthenticated-urls #{"/oauth2/google"
+                           "/oauth2/callback"
+                           "/login"
+                           "/logout"
+                           "/done"})
+
+(defn wrap-authentication-needed? [handler]
+  (fn [{:keys [session uri] :as req}]
+    (let [auth-needed? (cond (unauthenticated-urls uri) false
+                             (nil? (:user-details session)) true
+                        :else false)]
+      (handler (assoc req :auth-needed? auth-needed?)))
+  ))
+
+(def app
+  (->
+    ;(routes app-routes standard-routes)
+    (routing-handler (route/not-found "Not Found"))
+    ;(rd/wrap-spy "what the 'routing-handler' sees")
+    ;(wrap-auth-redirect)
+    (wrap-authentication-needed?)
+    (wrap-json-body {:keywords? true})
+    (wrap-json-response)
+    (wrap-keyword-params)
+    (wrap-nested-params)
+    (wrap-params)
+    (wrap-multipart-params)
+    (wrap-flash)
+    (wrap-session)
+    )
+  )
+
+(defn init [] (dunnit/process-latest-dunnit-emails true))
+
+(defn init-local [] 
+  (do 
+      (dunnit/load-sys-props sys-props-file)
+      ;(dunnit/load-sys-props "/var/tmp/creds.dunnitinbox.json")
+      (dunnit/process-latest-dunnit-emails true)))
+
+(defn destroy [] 
+  (println "Shutting down dunnit..."))
+
+(defn destroy-local [] 
+  (println "Shutting down dunnit"))
+
+(defn wrap-auth-redirect [handler]
+  (fn [{:keys [session uri] :as req}]
+      (cond 
+            (unauthenticated-urls uri)
+                (handler req)
+            (nil? (:user-details session))
+              {:status 302 :flash {:redirect-to uri} :headers {"Location" "/login"}}
+      :else (handler req))
+    )
+  )
+
+; Compojure routes - no longer used. Sticking with some basic core.match based routing for now. 
+; Opens up different options for makign routing decisions e.g. using arbritary request attributes
+; But less capable  feature rich for working with RESTful URLs.
+; May resurrect Compojure usage if I can't figure how to hand-roll elegant url-param matching+extraction
 (defroutes app-routes
-  (GET "/" [] (r/redirect "/dunnit"))
+
+  (GET "/" [] 
+    (r/redirect "/dunnit"))
 
   (GET "/login" [redirect-to] 
     (views/login-page (if (nil? redirect-to) "/dunnit" redirect-to)))
-
-  (GET "/logout" [] 
-    {:status 302
-     :session nil
-     :headers {"Location" "/login"}})
 
   (POST "/login" {:keys [session params]}
     {:status 302
      :session (assoc session :username (:username params))
      :headers {"Location" (if (nil? (:redirect-to params)) "/dunnit" (:redirect-to params))}})
 
+  (GET "/logout" [] 
+    {:status 302, :session nil, :headers {"Location" "/login"}})
+
   (GET "/dunnit" []
-      (views/done-home-page :dones @dunnit/dones))
+    (views/done-home-page :dones (dunnit/all-dones)))
 
   (POST "/dunnit" {:keys [session params]}
     (if (not (clojure.string/blank? (:done params)))
-      (dunnit/persist-in dunnit/dones {:done (:done params) :message-id "N/A" :date (t/now) :from (:username session) :client "Dunnit Website"}))
+      (dunnit/add {:done (:done params) :message-id "N/A" :date (t/now) :from (:username session) :client "Dunnit Website"}))
     (r/redirect-after-post "/dunnit"))
 
   (GET "/customtables" []
-      (views/custom-table-creator :dones @dunnit/dones :tables @tables))
+    (views/custom-table-creator :dones (dunnit/all-dones) :tables @tables))
 
   (POST "/customtables" {form-params :form-params}
     (let [cols (-> (dissoc form-params "title")
@@ -57,8 +257,8 @@
                  table-title
                  {:cols cols :grouping grouping}
                       ))
-          (r/redirect-after-post "/customtables")
-        )))
+        (r/redirect-after-post "/customtables")
+      )))
 
   (POST "/done" {body :body}
     (let [data  (get-in body [:message :data])
@@ -71,7 +271,7 @@
         (r/response 
           (do
             ;(dunnit/persist-in dunnit/notifications {:gmail-notif gmail-notif :history-api-resp (online/history (:historyId gmail-notif) (dunnit/label-dunnit-new))})
-            (dunnit/persist-in dunnit/pub-sub-messages {:gmail-notif gmail-notif, :raw-message (:message pub-sub-message)})
+            ;(dunnit/persist-in dunnit/pub-sub-messages {:gmail-notif gmail-notif, :raw-message (:message pub-sub-message)})
             (str "Processed " (count (dunnit/process-latest-dunnit-emails true)) " new dones")))
         (r/status 200)
         (r/header "Content-Type" "application/json"))
@@ -83,46 +283,10 @@
     )
   )
 
+  ;(route/resources "/")
+
+  ;(route/not-found "Not Found")
+
 )
 
-(defroutes standard-routes
-           (route/resources "/")
-           (route/not-found "Not Found"))
 
-(defn wrap-simple-auth [handler]
-  (fn [req]
-    (let [session (:session req)
-          username (:username session)
-          uri (:uri req)]
-      (do 
-        (cond 
-              (= uri "/login") 
-                (handler req)
-              (= uri "/done") 
-                (handler req)
-              (nil? username) 
-                {:status 302 :headers {"Location" (str "/login" "?redirect-to=" uri)}}
-        :else (handler req))
-        )
-      )
-    )
-  )
-
-(def app
-  (-> (routes app-routes standard-routes)
-    (wrap-json-body {:keywords? true})
-    (wrap-json-response)
-    (wrap-simple-auth)
-    ;(rd/wrap-spy "what the auth handler sees")
-    (handler/site)
-    ;(rd/wrap-spy "what the site handler sees")
-    )
-  )
-
-(defn init [] (dunnit/process-previous-dunnit-emails true))
-
-(defn init-local [] 
-  (do 
-      (dunnit/load-sys-props sys-props-file)
-      ;(dunnit/load-sys-props "/var/tmp/creds.dunnitinbox.json")
-      (dunnit/process-previous-dunnit-emails true)))
