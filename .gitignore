@@ -7,3 +7,6 @@ done.iml
 *.swp
 target/
 gae/
+config.json
+appengine-web.local.xml
+dunnit.vim

@@ -20,11 +20,10 @@
         ))
 
 (defn set-headers [connection headers]
-  (doall 
-    (for [header headers] 
-      (doto connection (.setRequestProperty (first header) (second header))))
-    )
-  )
+  (do 
+    (doseq [[k v] headers] (.setRequestProperty connection k v))
+    connection
+  ))
 
 (defn gae-get-req
   ([url-str headers] (gae-get-req url-str headers true))

@@ -1,13 +1,14 @@
 (ns done.offline
   (:require 
     [cheshire.core :as json]
+    [clojure.walk :as walk]
             ))
 
 (def all-emails 
   (do (println "Slurping all emails")
     (->> (slurp "/var/tmp/emails.json") 
        (cheshire.core/parse-string) 
-       (clojure.walk/keywordize-keys))))
+       (walk/keywordize-keys))))
 
 (def emails-by-id
   (->> (group-by #(get-in % [:body :id]) all-emails)))

@@ -20,10 +20,10 @@
 
 
 ;; I have taken the liberty of removing some of the less fascinating entries from the request and response maps, for clarity
-;(def kill-keys [:body :character-encoding :remote-addr :server-name :server-port :ssl-client-cert :scheme  :content-type  :content-length])
-(def kill-keys [])
-;(def kill-headers ["user-agent" "accept" "accept-encoding" "accept-language" "accept-charset" "cache-control" "connection"])
-(def kill-headers [])
+(def kill-keys [:body :character-encoding :remote-addr :server-name :server-port :ssl-client-cert :scheme  :content-type  :content-length])
+;(def kill-keys [])
+(def kill-headers ["user-agent" "accept" "accept-encoding" "accept-language" "accept-charset" "cache-control" "connection"])
+;(def kill-headers [])
 
 (defn wrap-spy [handler spyname & {:keys [log-req log-resp] :or {log-req true log-resp false}}]
   (fn [request]

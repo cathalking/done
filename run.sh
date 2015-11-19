@@ -1,0 +1,7 @@
+#!/bin/bash
+log_file=/var/tmp/dunnit.`date "+%Y%m%d-%H%M%S"`.log
+touch ${log_file}
+ln -fs ${log_file} /var/tmp/dunnit.log
+lein clean && lein ring uberwar 
+rm -rf gae && unzip -d gae target/*.war && cp appengine-web.local.xml gae/WEB-INF/appengine-web.xml && cp cron.xml gae/WEB-INF
+$APPENGINE_HOME/bin/dev_appserver.sh gae > ${log_file} 2>&1

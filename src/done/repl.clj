@@ -1,8 +1,9 @@
 (ns done.repl
   (:require 
             [done.handler :refer [app init-local destroy-local]]
+            [ring.server.standalone :refer [serve]]
             )
-  (:use ring.server.standalone
+  (:use 
         [ring.middleware file-info file]))
 
 (defonce server (atom nil))

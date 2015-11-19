@@ -9,7 +9,6 @@
 ))
  
 (defn REDIRECT_URI [] (str (dunnit/app-domain) "/oauth2/callback"))
-(def google-user (atom {:google-id "" :google-name "" :google-email ""}))
  
 (defn request-user-to-authorize [& {:keys [client_id scopes original-uri]}] 
   (str "https://accounts.google.com/o/oauth2/auth?"
@@ -33,7 +32,4 @@
 (defn request-user-details [access-token]
   (client/gae-get-req (str "https://www.googleapis.com/oauth2/v1/userinfo?access_token=" access-token)
                       [["Content-Type" "application/json"]] true))
-      ;(let [user-details (:body user-details-resp)]
-        ;(swap! google-user 
-        ;  #(assoc % :google-id %2 :google-name %3 :google-email %4) (:id user-details) (:name user-details) (:email user-details)))))
  

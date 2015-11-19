@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cronentries>
+  <cron>
+    <url>/cron/wakeup</url>
+    <description>Try to prevent instance from being brought down</description>
+    <schedule>every 1 minutes from 06:00 to 23:59</schedule>
+    <timezone>Europe/Belfast</timezone>
+  </cron>
+  <cron>
+    <url>/cron/nudge</url>
+    <description>Send Dunnit nudge emails</description>
+    <schedule>every 1 hours from 06:00 to 23:00</schedule>
+    <timezone>Europe/Belfast</timezone>
+  </cron>
+</cronentries>
