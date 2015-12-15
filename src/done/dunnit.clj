@@ -1,14 +1,15 @@
 (ns done.dunnit
   (:require 
-    [done.online :refer :all]
-    ;[done.offline :refer :all]
+    [done.gmail-online :refer :all]
+    ;[done.gmail-offline :refer :all]
     ;[done.in-memory :as persist]
-    [done.datastore :as persist]
+    [done.persist :as persist]
     [clojure.data.codec.base64 :as b64]
     [cheshire.core :as json]
+    [clojure.tools.logging :as log]
     [clj-time.format :as tf]
     [clj-time.coerce :as tc])
-  (:import (com.google.api.client.repackaged.org.apache.commons.codec.binary Base64))
+  (:refer-clojure :exclude [update])
 )
 
 ;(def notifications (ref []))
@@ -89,15 +90,15 @@
 (defn search [criteria record-type]
   (cond
     (= "done" record-type)
-      (persist/find-all (persist/query "done" {:done criteria}))
+      (persist/find-all "done" {:done criteria})
     (= "username" record-type)
-      (persist/find-all (persist/query "user" {:username criteria}))
+      (persist/find-all "user" {:username criteria})
     (= "user-email" record-type)
-      (persist/find-all (persist/query "user" {:email criteria}))
+      (persist/find-all "user" {:email criteria})
   ))
 
 (defn search-users [user-email]
-  (persist/find-all (persist/query "user" {:email user-email})))
+  (persist/find-all "user" {:email user-email}))
 
 (defn extract-from [headers]
   (let [from-split (-> (:From headers) (clojure.string/split #" \<"))]
@@ -121,7 +122,7 @@
             ]
         (when process? (modify-message message-id ["INBOX" "UNREAD" (label-dunnit-new)] [(label-dunnit-processed)] log?))
         (if (nil? user)
-          (println "Found no registered user with email address: " from)
+          (log/info "Found no registered user with email address: " from)
           (doseq [done-text new-dones]
             (persist/create 
                   { :kind "done"
@@ -134,12 +135,10 @@
                     :client (:X-Mailer headers)
                     :content-type (:Content-Type headers)
                     :content-encoding (:Content-Transfer-Encoding headers)})))
-              ;(persist/create done)
-              ;new-dones)))
     )
     (catch Exception e
       (do
-        (println "Encountered error processing message" message-id " - will attempt to tag with gmail error label. Exception was:")
+        (log/info "Encountered error processing message" message-id " - will attempt to tag with gmail error label. Exception was:")
         (. e printStackTrace)
         (modify-message message-id ["INBOX" "UNREAD" (label-dunnit-new)] [(label-dunnit-error)] log?))
     ))))
@@ -151,48 +150,50 @@
         (:value header)
         ))
 
-(defn process-previous-dunnit-emails 
-  ([] (process-previous-dunnit-emails false))
-  ([log?] ; use doall to force the realisation of lazy sequences i.e. I want my side effects and I want them now please.
-    (doall 
-      (->> (get-all-message-ids (label-dunnit-processed) log?)
-         (map #(process-dunnit % false log?))))))
+(defn load-previous-dunnit-emails 
+  ([] (load-previous-dunnit-emails false))
+  ([log?]
+    (let [message-ids (get-all-message-ids (label-dunnit-processed) log?)]
+      (doseq [message-id message-ids]
+        (process-dunnit message-id false log?))
+      (log/info "Read in" (count message-ids) "previous dunnit emails"))
+  ))
 
 (defn process-latest-dunnit-emails 
   ([] (process-latest-dunnit-emails false))
   ([log?]
     (let [message-ids (get-all-message-ids (label-dunnit-new) log?)]
-      (doseq [message-id (get-all-message-ids (label-dunnit-new) log?)]
+      (doseq [message-id message-ids]
         (process-dunnit message-id true log?))
-      (println "Processed" (count message-ids) "dunnit emails"))
+      (log/info "Processed" (count message-ids) "dunnit emails"))
   ))
  
 (defn all-dones []
-  (persist/find-all (persist/query "done" {})))
+  (persist/find-all "done" {}))
 
 (defn all-users []
-  (persist/find-all (persist/query "user" {})))
+  (persist/find-all "user" {}))
 
 (defn all-user-prefs []
-  (persist/find-all (persist/query "preferences" {})))
+  (persist/find-all "preferences" {}))
 
 (defn all-nudge-users []
-  (persist/find-all (persist/query "preferences" {:disable-nudges false})))
+  (persist/find-all "preferences" {:disable-nudges false}))
 
 (defn search-nudge-users [notif-time]
-  (persist/find-all (persist/query "preferences" {:notif-times notif-time, :disable-nudges false})))
+  (persist/find-all "preferences" {:notif-times notif-time, :disable-nudges false}))
 
 (defn search-dones [done-text]
-  (persist/find-all (persist/query "done" {:done done-text})))
+  (persist/find-all "done" {:done done-text}))
 
 (defn search-dones-by-user [username]
-  (persist/find-all (persist/query "done" {:username username})))
+  (persist/find-all "done" {:username username}))
 
 (defn search-usernames [username]
-  (persist/find-all (persist/query "user" {:username username})))
+  (persist/find-all "user" {:username username}))
 
 (defn search-prefs [username]
-  (persist/find-all (persist/query "preferences" {:username username})))
+  (persist/find-all "preferences" {:username username}))
 
 (defn update [entity-key props]
   (persist/update entity-key props))
@@ -204,11 +205,11 @@
 
 (defn send-nudges [] 
   (let [all-nudge-user-prefs (all-nudge-users)]
-    (println "Found" (count all-nudge-user-prefs) "user(s) registered for nudges")
+    (log/info "Found" (count all-nudge-user-prefs) "user(s) registered for nudges")
     (doseq [user-pref all-nudge-user-prefs]
       (let [user (first (search-usernames (:username user-pref)))
             user-email (:email user)]
-        (println "Sending nudge to" user-email)
+        (log/info "Sending nudge to" user-email)
         (send-email :to user-email
                     :from "dunnitinbox+new@gmail.com" 
                     :subject "Nudge nudge - what'd you get done today?" 
@@ -219,11 +220,11 @@
 
 (defn send-nudges2 [nudge-time] 
   (let [all-nudge-user-prefs (search-nudge-users nudge-time)]
-    (println "Found" (count all-nudge-user-prefs) "user(s) registered for nudges at " nudge-time)
+    (log/info "Found" (count all-nudge-user-prefs) "user(s) registered for nudges at " nudge-time)
     (doseq [user-pref all-nudge-user-prefs]
       (let [user (first (search-usernames (:username user-pref)))
             user-email (:email user)]
-        (println "Sending nudge to" user-email)
+        (log/info "Sending nudge to" user-email)
         (send-email :to user-email
                     :from "dunnitinbox+new@gmail.com" 
                     :subject "Nudge nudge - what'd you get done today?" 

@@ -7,6 +7,9 @@ done.iml
 *.swp
 target/
 gae/
+logs/
 config.json
 appengine-web.local.xml
 dunnit.vim
+nohup.out
+

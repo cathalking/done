@@ -2,6 +2,7 @@
   (:require 
     [cheshire.core :as json]
     [done.http :as http]
+    [clojure.tools.logging :as log]
      ))
 
 (defn oauth2-gmail-api-creds [] {:refresh_token (System/getProperty "dunnit-inbox-gmail-api-refresh-token") 
@@ -15,15 +16,15 @@
 (def oauth2-access-token (ref {:access_token nil :expires_in nil}))
 (def google-oauth2-api-headers [["Content-Type" "application/x-www-form-urlencoded"]])
 
+(defn- now [] (quot (System/currentTimeMillis) 1000))
+
 (defn as-request-params [m]
   (->> (clojure.walk/stringify-keys m)
        (map (fn [[k v]] (str k"="v)))
        (clojure.string/join \&))
   )
 
-(defn now [] (quot (System/currentTimeMillis) 1000))
-
-(defn refresh-access-token 
+(defn- refresh-access-token 
   ([] (refresh-access-token false))
   ([log?]
     (let [resp (http/gae-post-req "https://accounts.google.com/o/oauth2/token" 
@@ -32,7 +33,9 @@
                                   log?)
         access-token (get-in resp [:body :access_token])
         expires-in (+ (now) (get-in resp [:body :expires_in]))]
-      (if (= 200 (:status resp)) (println "Refreshed gmail api access token") (println "Failed to refresh token. Response was: " (:body resp)))
+      (if (= 200 (:status resp)) 
+        (log/info "Refreshed gmail api access token") 
+        (log/info "Failed to refresh token. Response was: " (:body resp)))
       (dosync (alter oauth2-access-token merge @oauth2-access-token {:access_token access-token :expires_in expires-in}))
     )
   ))

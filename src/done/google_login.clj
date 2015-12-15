@@ -5,7 +5,6 @@
            [done.dunnit :as dunnit]
            [ring.util.codec]
            [cheshire.core :as json]
-           ;[noir.response :as resp]
 ))
  
 (defn REDIRECT_URI [] (str (dunnit/app-domain) "/oauth2/callback"))

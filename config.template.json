@@ -1,0 +1,15 @@
+{ 
+  "load-test-data" : "true",
+  "label-dunnit-new" : "Label_3",
+  "label-dunnit-processed" : "Label_5",
+  "label-dunnit-test" : "Label_7",
+  "label-dunnit-error" : "Label_9",
+  "app-domain" : "http://localhost:3000",
+  "gmail-api-domain" : "https://www.googleapis.com/gmail/v1",
+  "dunnit-web-app-oauth2-client-id" : "????",
+  "dunnit-web-app-oauth2-client-secret" : "????",
+  "dunnit-other-app-oauth2-grant-type" : "refresh_token",
+  "dunnit-other-app-oauth2-client-id" : "????",
+  "dunnit-other-app-oauth2-client-secret" : "????",
+  "dunnit-inbox-gmail-api-refresh-token" : "????"
+}

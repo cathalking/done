@@ -1,4 +1,4 @@
-(ns done.offline
+(ns done.gmail-offline
   (:require 
     [cheshire.core :as json]
     [clojure.walk :as walk]

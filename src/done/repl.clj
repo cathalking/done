@@ -1,7 +1,7 @@
 (ns done.repl
   (:require 
-            [done.handler :refer [app init-local destroy-local]]
-            [ring.server.standalone :refer [serve]]
+            [done.handler :as handler]
+            [ring.server.standalone]
             )
   (:use 
         [ring.middleware file-info file]))
@@ -13,27 +13,27 @@
   ;; the server is forced to re-resolve the symbol in the var
   ;; rather than having its own copy. When the root binding
   ;; changes, the server picks it up without having to restart.
-  (-> #'app
+  (-> (var handler/app)
       ; Makes static assets in $PROJECT_DIR/resources/public/ available.
       (wrap-file "resources")
       ; Content-Type, Content-Length, and Last Modified headers for files in body
       (wrap-file-info)))
 
-(defn start-server
+(defn ^:dynamic start-server
   "used for starting the server in development mode from REPL"
   [& [port]]
   (let [port (if port (Integer/parseInt port) 3000)]
     (reset! server
-            (serve (get-handler)
+            (ring.server.standalone/serve (get-handler)
                    {:port port
-                    :init init-local
+                    :init handler/init-local
                     :stacktraces? true
                     :open-browser? false
                     :auto-reload? true
-                    :destroy destroy-local
+                    :destroy handler/destroy-local
                     :join true}))
     ))
 
-(defn stop-server []
+(defn ^:dynamic stop-server []
   (.stop @server)
   (reset! server nil))

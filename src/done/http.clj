@@ -1,6 +1,7 @@
 (ns done.http
   (:require [clojure.walk :as walk]
             [cheshire.core :as json]
+            [clojure.tools.logging :as log]
             )
   (:import (java.net URL)
            (java.io OutputStreamWriter InputStreamReader BufferedReader)))
@@ -34,7 +35,7 @@
                           (set-headers connection headers)
                           connection)
         resp (handle-response http-url-conn)] 
-      (when log? (println "Request:" url-str " Response:" resp))
+      (when log? (log/info "Request:" url-str " Response:" resp))
       resp
   )))
 
@@ -52,7 +53,7 @@
       (do
         (doto output-writer (. write payload) (. close))
         (let [resp (handle-response http-url-conn)]
-          (when log? (println "Request:" url-str " Response:" resp))
+          (when log? (log/info "Request:" url-str " Response:" resp))
           resp
         )))
    )

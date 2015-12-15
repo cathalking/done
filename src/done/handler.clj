@@ -1,24 +1,24 @@
 (ns done.handler
   (:require 
             [done.dunnit :as dunnit]
-            [done.online :refer [sys-props-file]]
-            ;[done.offline :refer [sys-props-file]]
+            [done.gmail-online :refer [sys-props-file]]
+            ;[done.gmail-offline :refer [sys-props-file]]
             [done.googleoauth :as googleoauth]
             [done.views :as views]
             [done.ringdebug :as rd]
             ;[done.cache :as cache]
             [done.google-login :as google-login]
-            [done.datastore :as gae]
             [cheshire.core :as json]
             [clj-time.core :as t]
             [clj-time.coerce :as tc]
             [clojure.core.match :refer [match]]
             [clojure.string :refer [blank?]]
+            [clojure.tools.logging :as log]
             [compojure.core :refer [GET POST routes defroutes]]
             [compojure.route :as route]
             ;[compojure.handler :as handler]
             [ring.util.response :as r]
-            [ring.middleware json session keyword-params flash multipart-params params nested-params]
+            ;[ring.middleware json session keyword-params flash multipart-params params nested-params]
             [ring.middleware.json :refer [wrap-json-body wrap-json-response]]
             [ring.middleware.session :refer [wrap-session]]
             [ring.middleware.keyword-params :refer [wrap-keyword-params]]
@@ -84,7 +84,8 @@
             ;:user-email-results (:search-useremails flash) 
             ;:username-results (:search-usernames flash) 
             :results (:search-results flash)
-            :user-details (:user-details session))
+            :user-details (:user-details session)),
+   :headers {"Content-Type" "text/html; charset=utf-8"}
   })
 
 (defn process-submitted-search [{:keys [session params]}]
@@ -103,8 +104,8 @@
 (defn save-settings [{:keys [session params form-params]}]
   (let [username (:username session)
         existing-prefs (first (dunnit/search-prefs username))
-        notif-days (->> (get form-params "days") (map #(Integer/parseInt %))) ; Take from form-params because params map only contains single-value
-        notif-times (->> (get form-params "times") (map #(Integer/parseInt %)))
+        notif-days (->> (flatten (conj [] (get form-params "days"))) (map #(Integer/parseInt %))); Take from form-params because params map only contains single-value
+        notif-times (->> (flatten (conj [] (get form-params "times"))) (map #(Integer/parseInt %)))
         disable-nudges (= "on" (:no-nudges params))
         new-prefs {:notif-times notif-times, :notif-days notif-days, 
                :date (tc/to-date (t/now)), :disable-nudges disable-nudges, :username username}]
@@ -152,14 +153,14 @@
 
 (defn cron-send-nudges [_]
   (let [nudge-time (t/hour (t/now))]
-    (println "Handle cron request to send nudges to registered users for time" nudge-time)
+    (log/info "Handle cron request to send nudges to registered users for time" nudge-time)
     (dunnit/send-nudges2 nudge-time)
     {:status 200}
   ))
 
 (defn cron-ping [_] 
   (do
-    (println "Ping")
+    (log/info "Ping")
     {:status 200}))
 
 (defn admin-send-nudges [_] 
@@ -170,7 +171,7 @@
 
 (defn send-nudges [_] 
   (do
-    (println "Actually sending nudge emails")
+    (log/info "Actually sending nudge emails")
     (dunnit/send-nudges)
     {:status 200}
   ))
@@ -302,23 +303,13 @@
       (handler (assoc req :auth-needed? auth-needed?)))
   ))
 
-(comment 
-  (defn environment-decorator
-    "decorates the given application with a local version of the app engine environment"
-    [app]
-      (fn [request]
-        (gae/with-app-engine (gae/login-aware-proxy request)
-        (app request))))
-)
-
 (def app
   (->
     ;(routes app-routes standard-routes)
-    ;(routing-handler (environment-decorator (route/not-found "Not Found")))
     (routing-handler (route/not-found "Not Found"))
-    ;(rd/wrap-spy "what the 'routing-handler' sees")
     ;(wrap-auth-redirect)
     (wrap-authentication-needed?)
+    ;(rd/wrap-spy "what the 'routing-handler' sees")
     (wrap-json-body {:keywords? true})
     (wrap-json-response)
     (wrap-keyword-params)
@@ -330,42 +321,44 @@
     )
   )
 
+;(defn ^:dynamic setup-test-data []
 (defn setup-test-data []
   (if (= "true" (System/getProperty "load-test-data"))
     (do
-      (println "Adding test data")
+      (log/info "Adding test data")
       (dunnit/add {:kind "user", :username "cathalking", :email "cathalking1@gmail.com", :date (tc/to-date (t/now))})
       (dunnit/add {:kind "preferences", :notif-times [12, 15, 18], :notif-days [1,2,3,4,5,6,7], 
                    :date (tc/to-date (t/now)), :disable-nudges false, :username "cathalking"})
       (dunnit/add {:kind "user", :username "testuser", :email "cathalking1979@yahoo.com", :date (tc/to-date (t/now))})
       (dunnit/add {:kind "preferences", :notif-times [18, 21], :notif-days [5], 
-                   :date (tc/to-date (t/now)), :disable-nudges true, :username "testuser"}))
-    (println "No test data being added")))
+                   :date (tc/to-date (t/now)), :disable-nudges true, :username "testuser"})
+      (dunnit/load-previous-dunnit-emails true))
+    (log/info "No test data being added")))
 
 (defn init [] 
   (try 
     (do
-      (println "Doing init")
+      (log/info "Doing init")
       (setup-test-data)
       (dunnit/process-latest-dunnit-emails true))
     (catch Exception e
-      (println "Encountered error doing init. Exception was:")
+      (log/info "Encountered error doing init. Exception was:")
       (. e printStackTrace)))
   )
 
 (defn init-local [] 
   (do 
-    (println "Doing init-local")
+    (log/info "Doing init-local")
     (dunnit/load-sys-props sys-props-file)
     (setup-test-data)
     (dunnit/process-latest-dunnit-emails true)
   ))
 
 (defn destroy [] 
-  (println "Shutting down dunnit..."))
+  (log/info "Shutting down dunnit..."))
 
 (defn destroy-local [] 
-  (println "Shutting down dunnit"))
+  (log/info "Shutting down dunnit"))
 
 (defn wrap-auth-redirect [handler]
   (fn [{:keys [session uri] :as req}]
@@ -430,7 +423,7 @@
           pub-sub-message body
           gmail-notif (json/parse-string (dunnit/decode-msg data) true)
           gmail-notif-json-str (dunnit/decode-msg data)]
-     (println "Received: " (:message pub-sub-message))
+     (log/info "Received: " (:message pub-sub-message))
      (if (not (empty? gmail-notif))
        (->
         (r/response 

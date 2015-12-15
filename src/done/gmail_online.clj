@@ -1,4 +1,4 @@
-(ns done.online
+(ns done.gmail-online
   (:require 
     [clojure.data.codec.base64 :as b64]
     [cheshire.core :as json]
@@ -89,7 +89,6 @@
           url-safe-b64-email (-> raw-b64-email 
                                 (clojure.string/replace "/" "_")
                                 (clojure.string/replace "+" "-"))]
-      ;(println "Raw base64 mime email:" raw-b64-email)
       (http/gae-post-req
         (str (api-domain) "/users/me/messages/send")
           (json/generate-string {:raw url-safe-b64-email})
